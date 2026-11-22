@@ -7,8 +7,10 @@ import {
   type OpenSlot,
   type SalonSettings,
 } from '../api/scheduling'
+import { profileApi, type AdminClient, type Pricing } from '../api/profile'
 import { Calendar, LegendItem, type DayInfo } from '../components/Calendar'
-import { MONTHS, WEEKDAYS_LONG, addMonths, formatLong, monthRange, parseISO, todayISO } from '../lib/dates'
+import { CUTICLES, GROWTH, LENGTH, MATERIAL, NAIL_BED, labelOf } from '../lib/profileOptions'
+import { MONTHS, WEEKDAYS_LONG, WEEKDAYS_SHORT, addMonths, formatDuration, formatLong, monthRange, parseISO, todayISO } from '../lib/dates'
 
 const errorText = (err: unknown, fallback: string) => (err instanceof ApiError ? err.message : fallback)
 
@@ -40,6 +42,9 @@ export function Admin() {
 
       <h2 className="section-title">Program standard și reguli</h2>
       <SettingsForm onSaved={() => setVersion((v) => v + 1)} />
+
+      <h2 className="section-title">Prețuri și durate</h2>
+      <PricingForm />
     </section>
   )
 }
@@ -64,6 +69,7 @@ function ScheduleCalendar({ version }: { version: number }) {
   const [note, setNote] = useState('')
   const [newStart, setNewStart] = useState('08:00')
   const [newEnd, setNewEnd] = useState('16:00')
+  const [openClient, setOpenClient] = useState<string | null>(null)
 
   const loadMonth = useCallback(async (year: number, month: number) => {
     const { from, to } = monthRange(year, month)
@@ -269,15 +275,25 @@ function ScheduleCalendar({ version }: { version: number }) {
             <ul className="appointment-list">
               {appointments.map((a) => (
                 <li key={a.id} className="appointment-item">
-                  <div>
+                  <div style={{ width: '100%' }}>
                     <strong>
                       {a.start} – {a.end}
                     </strong>
-                    <span>{a.clientName}</span>
-                    <br />
-                    <span className="muted" style={{ fontSize: '0.85rem' }}>
-                      {a.email}
-                    </span>
+                    <button
+                      type="button"
+                      className="client-link"
+                      aria-expanded={openClient === a.id}
+                      onClick={() => setOpenClient(openClient === a.id ? null : a.id)}
+                    >
+                      {a.clientName}
+                    </button>
+                    {a.serviceName && (
+                      <div className="work-tag">
+                        {a.serviceName}
+                        {a.price != null && ` · ${a.price} lei`}
+                      </div>
+                    )}
+                    {openClient === a.id && <ClientCard clientId={a.clientId} email={a.email} details={a.details} />}
                   </div>
                 </li>
               ))}
@@ -307,6 +323,190 @@ function ScheduleCalendar({ version }: { version: number }) {
         </aside>
       </div>
     </>
+  )
+}
+
+// ---------------------------------------------------------------- fișa clientei (la click pe nume)
+
+function ClientCard({ clientId, email, details }: { clientId: string; email: string; details?: string | null }) {
+  const [data, setData] = useState<AdminClient | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    profileApi
+      .adminClient(clientId)
+      .then(setData)
+      .catch((err) => setError(errorText(err, 'Nu am putut încărca fișa.')))
+  }, [clientId])
+
+  if (error) return <div className="alert">{error}</div>
+  if (!data) return <p className="muted small">Se încarcă fișa…</p>
+
+  const p = data.profile
+  return (
+    <div className="client-card">
+      {details && (
+        <p>
+          <strong>Lucrarea programată:</strong> {details}
+        </p>
+      )}
+      {!p ? (
+        <p className="muted">Clienta nu are fișă completată.</p>
+      ) : (
+        <dl>
+          <dt>E-mail</dt>
+          <dd>{email}</dd>
+          {p.age && (
+            <>
+              <dt>Vârsta</dt>
+              <dd>{p.age} ani</dd>
+            </>
+          )}
+          <dt>Cresc</dt>
+          <dd>{labelOf(GROWTH, p.growth)}</dd>
+          <dt>Pat unghial</dt>
+          <dd>{labelOf(NAIL_BED, p.nailBed)}</dd>
+          <dt>Cuticule</dt>
+          <dd>{labelOf(CUTICLES, p.cuticles)}</dd>
+          <dt>Are acum</dt>
+          <dd>{labelOf(MATERIAL, p.existingMaterial)}</dd>
+          <dt>Lungime</dt>
+          <dd>{labelOf(LENGTH, p.length)}</dd>
+          {p.wantsDesign && (
+            <>
+              <dt>Culori</dt>
+              <dd>{p.colors}</dd>
+              <dt>Modele</dt>
+              <dd>{p.models.length ? p.models.join(', ') : '—'}</dd>
+            </>
+          )}
+          {p.preferredDays.length > 0 && (
+            <>
+              <dt>Preferă</dt>
+              <dd>
+                {p.preferredDays.map((d) => WEEKDAYS_SHORT[d - 1]).join(', ')}
+                {p.preferredFrom && `, ${p.preferredFrom}–${p.preferredTo}`}
+              </dd>
+            </>
+          )}
+          {p.notes && (
+            <>
+              <dt>Observații</dt>
+              <dd>{p.notes}</dd>
+            </>
+          )}
+          {data.estimate && (
+            <>
+              <dt>Acum ar dura</dt>
+              <dd>
+                {formatDuration(data.estimate.minutes)} · {data.estimate.price} lei
+              </dd>
+            </>
+          )}
+        </dl>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- prețuri și durate
+
+function PricingForm() {
+  const [pricing, setPricing] = useState<Pricing | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    profileApi
+      .pricing()
+      .then(setPricing)
+      .catch((err) => setError(errorText(err, 'Nu am putut încărca prețurile.')))
+  }, [])
+
+  if (!pricing) return error ? <div className="alert">{error}</div> : <p className="muted">Se încarcă…</p>
+
+  const update = (group: keyof Pricing, code: string, field: 'minutes' | 'price', value: number) => {
+    setPricing({ ...pricing, [group]: pricing[group].map((i) => (i.code === code ? { ...i, [field]: value } : i)) })
+    setSaved(false)
+  }
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      setPricing(await profileApi.savePricing(pricing))
+      setSaved(true)
+    } catch (err) {
+      setError(errorText(err, 'Nu am putut salva prețurile.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const table = (group: keyof Pricing, title: string) => (
+    <>
+      <h3 className="pricing-group">{title}</h3>
+      <table className="pricing-table">
+        <thead>
+          <tr>
+            <th>Ce</th>
+            <th>Minute</th>
+            <th>Lei</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pricing[group].map((i) => (
+            <tr key={i.code}>
+              <td>{i.name}</td>
+              <td>
+                <input
+                  type="number"
+                  min={0}
+                  max={480}
+                  aria-label={`Minute — ${i.name}`}
+                  value={i.minutes}
+                  onChange={(e) => update(group, i.code, 'minutes', Number(e.target.value))}
+                />
+              </td>
+              <td>
+                <input
+                  type="number"
+                  min={0}
+                  max={10000}
+                  aria-label={`Preț — ${i.name}`}
+                  value={i.price}
+                  onChange={(e) => update(group, i.code, 'price', Number(e.target.value))}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  )
+
+  return (
+    <form className="card settings-form" onSubmit={submit} noValidate>
+      {error && (
+        <div className="alert" role="alert">
+          {error}
+        </div>
+      )}
+      <p className="muted">
+        Din aceste valori și din fișa fiecărei cliente se calculează durata și prețul lucrării. Programările deja făcute
+        își păstrează prețul de atunci.
+      </p>
+      {table('services', 'Lucrări')}
+      {table('extras', 'Adaosuri')}
+      <div className="settings-actions" style={{ marginTop: 18 }}>
+        <button type="submit" className="btn btn-primary" disabled={saving} aria-busy={saving}>
+          {saving ? 'Se salvează…' : 'Salvează prețurile'}
+        </button>
+        {saved && <span className="muted">Salvat.</span>}
+      </div>
+    </form>
   )
 }
 

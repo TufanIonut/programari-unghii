@@ -19,14 +19,20 @@ export interface Appointment {
   start: string
   end: string
   status: 'booked' | 'cancelled'
+  serviceName?: string | null
+  price?: number | null
 }
 
 export interface AdminAppointment {
   id: string
   start: string
   end: string
+  clientId: string
   clientName: string
   email: string
+  serviceName?: string | null
+  price?: number | null
+  details?: string | null
 }
 
 export interface SalonSettings {

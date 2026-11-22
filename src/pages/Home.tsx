@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
+import { profileApi, type WorkEstimate } from '../api/profile'
 import { schedulingApi, type Appointment, type DayAvailability } from '../api/scheduling'
 import { useAuth } from '../auth/context'
 import { Calendar, LegendItem, type DayInfo } from '../components/Calendar'
@@ -45,7 +46,24 @@ function Bottles() {
 
 export function Home() {
   const { user } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
   const today = parseISO(todayISO())
+
+  // fișa clientei: undefined = încă nu știm, null = nu are fișă (clientă nouă)
+  const [work, setWork] = useState<WorkEstimate | null | undefined>(undefined)
+  const isClient = user?.role === 'client'
+
+  useEffect(() => {
+    if (!isClient) {
+      setWork(undefined)
+      return
+    }
+    profileApi
+      .get()
+      .then((r) => setWork(r?.estimate ?? null))
+      .catch(() => setWork(undefined))
+  }, [isClient])
 
   const [view, setView] = useState({ year: today.year, month: today.month })
   const [days, setDays] = useState<Record<string, DayAvailability>>({})
@@ -95,6 +113,22 @@ export function Home() {
     loadNextSlot()
   }, [loadNextSlot])
 
+  // revenire din fișă cu ziua aleasă înainte
+  const returnedDay = (location.state as { day?: string } | null)?.day
+  useEffect(() => {
+    if (!returnedDay || work === undefined) return
+    const { year, month } = parseISO(returnedDay)
+    setView({ year, month })
+    setSelectedDay(returnedDay)
+    setSelectedTime(null)
+    navigate('.', { replace: true, state: null })
+  }, [returnedDay, work, navigate])
+
+  // după ce se încarcă luna, alegem automat prima oră a zilei selectate
+  useEffect(() => {
+    if (selectedDay && !selectedTime && days[selectedDay]?.slots.length) setSelectedTime(days[selectedDay].slots[0])
+  }, [days, selectedDay, selectedTime])
+
   const monthsAhead = (view.year - today.year) * 12 + (view.month - today.month)
   const goMonth = (delta: number) => setView((v) => addMonths(v.year, v.month, delta))
 
@@ -119,6 +153,11 @@ export function Home() {
   )
 
   const selectDay = (iso: string, time?: string) => {
+    // clientă nouă: întâi fișa (din ea aflăm durata), apoi revine la ziua aleasă
+    if (isClient && work === null) {
+      navigate('/fisa', { state: { day: iso } })
+      return
+    }
     setSelectedDay(iso)
     setSelectedTime(time ?? days[iso]?.slots[0] ?? null)
     setBookError(null)
@@ -241,6 +280,12 @@ export function Home() {
               <p>
                 <strong>{formatLong(booked.date)}</strong>, de la <strong>{booked.start}</strong> la {booked.end}.
               </p>
+              {booked.serviceName && (
+                <p className="work-tag">
+                  {booked.serviceName}
+                  {booked.price != null && ` · ${booked.price} lei`}
+                </p>
+              )}
               <p className="muted">Plata se face în ziua programării, la salon.</p>
               <Link to="/profil" className="btn btn-secondary">
                 Programările mele
@@ -254,7 +299,13 @@ export function Home() {
           ) : (
             <>
               <h2 className="slot-title">{formatLong(selectedDay)}</h2>
-              {duration && <p className="muted">Lucrarea durează aproximativ {formatDuration(duration)}.</p>}
+              {work ? (
+                <p className="work-tag">
+                  {work.serviceName} · {formatDuration(work.minutes)} · {work.price} lei
+                </p>
+              ) : (
+                duration && <p className="muted">Lucrarea durează aproximativ {formatDuration(duration)}.</p>
+              )}
 
               {slots.length === 0 ? (
                 <p className="muted">{loading ? 'Se încarcă orele…' : 'Ziua asta s-a ocupat între timp. Alege altă zi.'}</p>

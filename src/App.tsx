@@ -2,6 +2,7 @@ import { Link, Route, Routes } from 'react-router-dom'
 import { RequireAuth } from './auth/RequireAuth'
 import { Layout } from './components/Layout'
 import { Admin } from './pages/Admin'
+import { Fisa } from './pages/Fisa'
 import { Home } from './pages/Home'
 import { Login } from './pages/Login'
 import { Profile } from './pages/Profile'
@@ -19,6 +20,14 @@ export default function App() {
           element={
             <RequireAuth>
               <Profile />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="fisa"
+          element={
+            <RequireAuth role="client">
+              <Fisa />
             </RequireAuth>
           }
         />

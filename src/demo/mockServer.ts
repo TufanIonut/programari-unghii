@@ -4,6 +4,8 @@
 
 import type { AuthResponse, User } from '../api/client'
 import type { AdminAppointment, Appointment, DayOff, OpenSlot, SalonSettings } from '../api/scheduling'
+import type { ClientProfile, Pricing, WorkEstimate } from '../api/profile'
+import { estimateWork } from '../lib/profileOptions'
 import { addDaysISO, availabilityForDay, type Busy, type Window } from './availability'
 
 interface StoredUser extends User {
@@ -18,6 +20,9 @@ interface StoredAppointment {
   end: string
   blockedUntil: string // HH:mm, include pauza
   status: 'booked' | 'cancelled'
+  serviceName?: string
+  price?: number
+  details?: string
 }
 
 interface DemoDb {
@@ -27,11 +32,13 @@ interface DemoDb {
   daysOff: DayOff[]
   slots: OpenSlot[]
   settings: SalonSettings
+  pricing: Pricing
+  profiles: Record<string, ClientProfile & { updatedAt: string }>
   sessionUserId: string | null
 }
 
 const KEY = 'programari-demo-db'
-const VERSION = 2 // crește la schimbări de structură → datele demo vechi se regenerează
+const VERSION = 3 // crește la schimbări de structură → datele demo vechi se regenerează
 export const DEMO_ADMIN_EMAIL = 'admin@demo.ro'
 
 // ---------------------------------------------------------------- stocare
@@ -94,7 +101,26 @@ function seed(): DemoDb {
     id: uid(), email: DEMO_ADMIN_EMAIL, firstName: 'Admin', lastName: 'Salon', role: 'admin', password: uid(),
   }
 
-  const db: DemoDb = { version: VERSION, users: [admin, ...clients], appointments: [], daysOff: [], slots: [], settings, sessionUserId: null }
+  const pricing: Pricing = {
+    services: [
+      { code: 'semipermanent', name: 'Ojă semipermanentă', minutes: 90, price: 120 },
+      { code: 'gel', name: 'Construcție gel', minutes: 150, price: 180 },
+      { code: 'intretinere', name: 'Întreținere gel', minutes: 120, price: 150 },
+      { code: 'manichiura', name: 'Manichiură clasică', minutes: 45, price: 60 },
+    ],
+    extras: [
+      { code: 'indepartare', name: 'Îndepărtare material vechi', minutes: 20, price: 30 },
+      { code: 'lungime_lunga', name: 'Lungime lungă', minutes: 15, price: 20 },
+      { code: 'lungime_xl', name: 'Lungime foarte lungă', minutes: 30, price: 40 },
+      { code: 'culoare', name: 'Culoare în plus (de fiecare)', minutes: 5, price: 5 },
+      { code: 'model', name: 'Model / nail art (de fiecare)', minutes: 10, price: 15 },
+    ],
+  }
+
+  const db: DemoDb = {
+    version: VERSION, users: [admin, ...clients], appointments: [], daysOff: [], slots: [],
+    settings, pricing, profiles: {}, sessionUserId: null,
+  }
 
   // umplem câteva zile lucrătoare din următoarele 3 săptămâni
   const pattern = [2, 1, 3, 0, 2, 1, 4, 2, 0, 3, 1, 2, 3]
@@ -113,6 +139,9 @@ function seed(): DemoDb {
         end: toHHMM(end),
         blockedUntil: toHHMM(end + settings.breakMinutes),
         status: 'booked',
+        serviceName: 'Ojă semipermanentă',
+        price: 120,
+        details: 'Ojă semipermanentă',
       })
       start = end + settings.breakMinutes
     }
@@ -151,7 +180,7 @@ const json = (status: number, body?: unknown) =>
     headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
   })
 
-const problem = (status: number, detail: string) => json(status, { status, detail })
+const problem = (status: number, detail: string, title?: string) => json(status, { status, detail, title })
 
 const publicUser = (u: StoredUser): User => ({
   id: u.id,
@@ -187,11 +216,15 @@ function windowsFor(db: DemoDb, date: string): Window[] {
   return db.slots.filter((x) => x.date === date).map((x) => ({ start: toMin(x.start), end: toMin(x.end) }))
 }
 
-function dayAvailability(db: DemoDb, date: string) {
+/** Lucrarea clientei, din fișă (null fără fișă). */
+function workFor(db: DemoDb, userId: string | undefined): WorkEstimate | null {
+  const profile = userId ? db.profiles[userId] : undefined
+  return profile ? estimateWork(profile, db.pricing) : null
+}
+
+function dayAvailability(db: DemoDb, date: string, duration = db.settings.defaultDurationMinutes) {
   const isOff = db.daysOff.some((d) => d.date === date)
-  return availabilityForDay(
-    date, db.settings, windowsFor(db, date), busyFor(db, date), isOff, db.settings.defaultDurationMinutes, new Date(),
-  )
+  return availabilityForDay(date, db.settings, windowsFor(db, date), busyFor(db, date), isOff, duration, new Date())
 }
 
 // ---------------------------------------------------------------- rute
@@ -251,9 +284,49 @@ export async function demoFetch(input: RequestInfo | URL, init: RequestInit = {}
   if (method === 'GET' && path === '/api/availability') {
     const from = q.get('from')!
     const to = q.get('to')!
+    const duration = (user?.role === 'client' && workFor(db, user.id)?.minutes) || db.settings.defaultDurationMinutes
     const days = []
-    for (let d = from; d <= to; d = addDaysISO(d, 1)) days.push(dayAvailability(db, d))
-    return json(200, { durationMinutes: db.settings.defaultDurationMinutes, days })
+    for (let d = from; d <= to; d = addDaysISO(d, 1)) days.push(dayAvailability(db, d, duration))
+    return json(200, { durationMinutes: duration, days })
+  }
+
+  // ---- prețuri (publice)
+  if (method === 'GET' && path === '/api/pricing') return json(200, db.pricing)
+
+  // ---- fișa clientei
+  if (path === '/api/profile') {
+    if (!user) return problem(401, 'Sesiunea a expirat.')
+    if (user.role !== 'client') return problem(403, 'Doar clientele au fișă.')
+
+    if (method === 'GET') {
+      const profile = db.profiles[user.id]
+      return profile ? json(200, { profile, estimate: workFor(db, user.id) }) : problem(404, 'Nu ai încă fișă.')
+    }
+
+    if (method === 'PUT') {
+      if (!body.consent) return problem(400, 'Ca să salvăm fișa, avem nevoie de acordul tău pentru prelucrarea datelor.')
+      if (!db.pricing.services.some((x) => x.code === body.service)) return problem(400, 'Alege lucrarea pe care o vrei.')
+      const profile: ClientProfile & { updatedAt: string } = {
+        age: body.age ?? null,
+        growth: body.growth,
+        nailBed: body.nailBed,
+        cuticles: body.cuticles,
+        existingMaterial: body.existingMaterial,
+        service: body.service,
+        length: body.length,
+        wantsDesign: Boolean(body.wantsDesign),
+        colors: body.wantsDesign ? Number(body.colors) || 1 : 1,
+        models: body.wantsDesign ? (body.models ?? []).map((m: string) => m.trim()).filter(Boolean) : [],
+        notes: body.notes?.trim() || null,
+        preferredDays: body.preferredDays ?? [],
+        preferredFrom: body.preferredFrom || null,
+        preferredTo: body.preferredTo || null,
+        updatedAt: new Date().toISOString(),
+      }
+      db.profiles[user.id] = profile
+      save(db)
+      return json(200, { profile, estimate: workFor(db, user.id) })
+    }
   }
 
   // ---- programările clientei
@@ -263,13 +336,16 @@ export async function demoFetch(input: RequestInfo | URL, init: RequestInit = {}
 
     if (method === 'POST' && path === '/api/appointments') {
       const { date, time } = body as { date: string; time: string }
-      if (!dayAvailability(db, date).slots.includes(time))
+      const work = workFor(db, user.id)
+      if (!work) return problem(409, 'Completează întâi fișa, ca să știm cât durează lucrarea ta.', 'profile_required')
+      if (!dayAvailability(db, date, work.minutes).slots.includes(time))
         return problem(409, 'Ora aleasă nu mai e disponibilă. Alege alt interval.')
       const start = toMin(time)
-      const end = start + db.settings.defaultDurationMinutes
+      const end = start + work.minutes
       const a: StoredAppointment = {
         id: uid(), clientId: user.id, date, start: time, end: toHHMM(end),
         blockedUntil: toHHMM(end + db.settings.breakMinutes), status: 'booked',
+        serviceName: work.serviceName, price: work.price, details: work.summary,
       }
       db.appointments.push(a)
       save(db)
@@ -373,6 +449,25 @@ export async function demoFetch(input: RequestInfo | URL, init: RequestInit = {}
       return json(204)
     }
 
+    if (method === 'PUT' && path === '/api/admin/pricing') {
+      const p = body as Pricing
+      const merge = (list: Pricing['services'], updates: Pricing['services']) =>
+        list.map((i) => {
+          const u = updates.find((x) => x.code === i.code)
+          return u ? { ...i, minutes: u.minutes, price: u.price } : i
+        })
+      db.pricing = { services: merge(db.pricing.services, p.services), extras: merge(db.pricing.extras, p.extras) }
+      save(db)
+      return json(200, db.pricing)
+    }
+
+    const client = path.match(/^\/api\/admin\/clients\/([^/]+)$/)
+    if (method === 'GET' && client) {
+      const u = db.users.find((x) => x.id === client[1] && x.role === 'client')
+      if (!u) return problem(404, 'Clienta nu există.')
+      return json(200, { user: publicUser(u), profile: db.profiles[u.id] ?? null, estimate: workFor(db, u.id) })
+    }
+
     if (method === 'GET' && path === '/api/admin/appointments') {
       const date = q.get('date')!
       const list: AdminAppointment[] = db.appointments
@@ -380,7 +475,11 @@ export async function demoFetch(input: RequestInfo | URL, init: RequestInit = {}
         .sort((a, b) => a.start.localeCompare(b.start))
         .map((a) => {
           const c = db.users.find((u) => u.id === a.clientId)
-          return { id: a.id, start: a.start, end: a.end, clientName: c ? `${c.firstName} ${c.lastName}` : '—', email: c?.email ?? '' }
+          return {
+            id: a.id, clientId: a.clientId, start: a.start, end: a.end,
+            clientName: c ? `${c.firstName} ${c.lastName}` : '—', email: c?.email ?? '',
+            serviceName: a.serviceName ?? null, price: a.price ?? null, details: a.details ?? null,
+          }
         })
       return json(200, list)
     }
@@ -390,7 +489,7 @@ export async function demoFetch(input: RequestInfo | URL, init: RequestInit = {}
 }
 
 function toDto(a: StoredAppointment): Appointment {
-  return { id: a.id, date: a.date, start: a.start, end: a.end, status: a.status }
+  return { id: a.id, date: a.date, start: a.start, end: a.end, status: a.status, serviceName: a.serviceName, price: a.price }
 }
 
 /** Șterge datele demo de pe dispozitiv (buton în bannerul demo). */

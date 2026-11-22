@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../api/client'
+import { profileApi, type ProfileResponse } from '../api/profile'
 import { schedulingApi, type Appointment } from '../api/scheduling'
 import { useAuth } from '../auth/context'
-import { formatLong } from '../lib/dates'
+import { formatDuration, formatLong } from '../lib/dates'
+import { LENGTH, MATERIAL, labelOf } from '../lib/profileOptions'
 
 export function Profile() {
   const { user } = useAuth()
   const [appointments, setAppointments] = useState<Appointment[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState<string | null>(null)
+  const [fisa, setFisa] = useState<ProfileResponse | null | undefined>(undefined)
 
   const load = useCallback(() => {
     schedulingApi
@@ -19,7 +22,9 @@ export function Profile() {
   }, [])
 
   useEffect(() => {
-    if (user?.role === 'client') load()
+    if (user?.role !== 'client') return
+    load()
+    profileApi.get().then(setFisa).catch(() => setFisa(undefined))
   }, [user, load])
 
   const cancel = async (a: Appointment) => {
@@ -63,6 +68,12 @@ export function Profile() {
                     <span className="muted">
                       {a.start} – {a.end}
                     </span>
+                    {a.serviceName && (
+                      <span className="work-tag">
+                        {a.serviceName}
+                        {a.price != null && ` · ${a.price} lei`}
+                      </span>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -80,11 +91,44 @@ export function Profile() {
         </>
       )}
 
+      {user.role === 'client' && fisa !== undefined && (
+        <>
+          <h2 className="section-title">Fișa mea</h2>
+          {fisa ? (
+            <div className="card fisa-summary">
+              <div className="estimate-totals">
+                <div>
+                  <strong>{formatDuration(fisa.estimate.minutes)}</strong>
+                  <small>durată</small>
+                </div>
+                <div>
+                  <strong>{fisa.estimate.price} lei</strong>
+                  <small>preț estimat</small>
+                </div>
+              </div>
+              <p>
+                <strong>{fisa.estimate.summary}</strong>
+              </p>
+              <p className="muted small">
+                Lungime: {labelOf(LENGTH, fisa.profile.length)} · Material acum: {labelOf(MATERIAL, fisa.profile.existingMaterial)}
+                {fisa.profile.wantsDesign && fisa.profile.models.length > 0 && <> · Modele: {fisa.profile.models.join(', ')}</>}
+              </p>
+              <Link to="/fisa" className="btn btn-secondary">
+                Modifică fișa
+              </Link>
+            </div>
+          ) : (
+            <div className="card fisa-summary">
+              <p>Încă nu ai completat fișa. Din ea aflăm cât durează lucrarea ta, ca să-ți arătăm orele potrivite.</p>
+              <Link to="/fisa" className="btn btn-primary">
+                Completează fișa
+              </Link>
+            </div>
+          )}
+        </>
+      )}
+
       <div className="info-grid">
-        <div className="info-tile">
-          <strong>Fișa de cunoaștere</strong>
-          <span className="muted">Urmează: detaliile despre unghii și designul dorit.</span>
-        </div>
         <div className="info-tile">
           <strong>Card de fidelitate</strong>
           <span className="muted">Urmează: codul QR și vizitele bifate.</span>
