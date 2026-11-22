@@ -1,6 +1,9 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { IS_DEMO } from '../api/client'
+import { useState } from 'react'
 import { useAuth } from '../auth/context'
+import { SEASON_LABEL, loadSeasonChoice, resolveSeason, saveSeasonChoice, seasonOf, type SeasonChoice } from '../lib/seasons'
+import { SeasonalBackdrop } from './SeasonalBackdrop'
 
 export const SALON_NAME = 'Studio Unghii'
 
@@ -14,6 +17,13 @@ export function Layout() {
     navigate('/')
   }
 
+  const [seasonChoice, setSeasonChoice] = useState<SeasonChoice>(loadSeasonChoice)
+  const season = resolveSeason(seasonChoice)
+  const changeSeason = (choice: SeasonChoice) => {
+    setSeasonChoice(choice)
+    saveSeasonChoice(choice)
+  }
+
   const navClass = ({ isActive }: { isActive: boolean }) => `btn btn-ghost${isActive ? ' active' : ''}`
 
   const resetDemo = async () => {
@@ -25,6 +35,7 @@ export function Layout() {
 
   return (
     <>
+      {season && <SeasonalBackdrop season={season} />}
       {IS_DEMO && (
         <div className="demo-banner" role="note">
           <span>Versiune demo — datele sunt simulate și rămân doar pe acest dispozitiv.</span>
@@ -77,8 +88,22 @@ export function Layout() {
       </main>
 
       <footer className="footer">
-        <div className="container">
-          © {new Date().getFullYear()} {SALON_NAME}
+        <div className="container footer-inner">
+          <span>
+            © {new Date().getFullYear()} {SALON_NAME}
+          </span>
+          <label className="season-picker">
+            <span>Decor</span>
+            <select value={seasonChoice} onChange={(e) => changeSeason(e.target.value as SeasonChoice)}>
+              <option value="auto">După anotimp ({SEASON_LABEL[seasonOf(new Date())].split(' — ')[1]})</option>
+              {(Object.keys(SEASON_LABEL) as (keyof typeof SEASON_LABEL)[]).map((s) => (
+                <option key={s} value={s}>
+                  {SEASON_LABEL[s]}
+                </option>
+              ))}
+              <option value="off">Fără animație</option>
+            </select>
+          </label>
         </div>
       </footer>
     </>

@@ -56,7 +56,8 @@ body {
   margin: 0;
   min-height: 100vh;
   line-height: 1.6;
-  background: var(--ivory);
+  /* fondul ivoriu stă pe :root, ca decorul de anotimp (z-index -1) să se vadă peste el */
+  background: transparent;
 }
 
 h1,
@@ -356,6 +357,41 @@ main { padding-block: clamp(28px, 6vw, 60px); }
   font-size: 0.85rem;
   color: var(--plum-muted);
   text-align: center;
+}
+
+.footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------- decor de anotimp */
+.season-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.season-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.season-picker select {
+  width: auto;
+  padding: 4px 28px 4px 10px;
+  font-size: 0.85rem;
+  min-height: 0;
+}
+
+@media (max-width: 520px) {
+  .footer-inner { justify-content: center; }
 }
 
 .page-loading {
@@ -909,7 +945,8 @@ button.tile:active, a.tile:active { transform: scale(0.985); }
 
   .sticky-cta .btn small { font-size: 0.76rem; font-weight: 500; opacity: 0.85; }
 
-  .has-sticky-cta { padding-bottom: 90px; }
+  /* spațiul de sub bară îl ia subsolul, ca selectorul de decor să nu rămână sub ea */
+  body:has(.sticky-cta) .footer { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 }
 
 @keyframes cta-in {
