@@ -3,8 +3,8 @@
 // și păstrează datele în localStorage — rămân doar pe dispozitivul pe care rulează demo-ul.
 
 import type { AuthResponse, User } from '../api/client'
-import type { AdminAppointment, Appointment, DayOff, SalonSettings } from '../api/scheduling'
-import { addDaysISO, availabilityForDay, type Busy } from './availability'
+import type { AdminAppointment, Appointment, DayOff, OpenSlot, SalonSettings } from '../api/scheduling'
+import { addDaysISO, availabilityForDay, type Busy, type Window } from './availability'
 
 interface StoredUser extends User {
   password: string
@@ -25,12 +25,13 @@ interface DemoDb {
   users: StoredUser[]
   appointments: StoredAppointment[]
   daysOff: DayOff[]
+  slots: OpenSlot[]
   settings: SalonSettings
   sessionUserId: string | null
 }
 
 const KEY = 'programari-demo-db'
-const VERSION = 1
+const VERSION = 2 // crește la schimbări de structură → datele demo vechi se regenerează
 export const DEMO_ADMIN_EMAIL = 'admin@demo.ro'
 
 // ---------------------------------------------------------------- stocare
@@ -93,7 +94,7 @@ function seed(): DemoDb {
     id: uid(), email: DEMO_ADMIN_EMAIL, firstName: 'Admin', lastName: 'Salon', role: 'admin', password: uid(),
   }
 
-  const db: DemoDb = { version: VERSION, users: [admin, ...clients], appointments: [], daysOff: [], settings, sessionUserId: null }
+  const db: DemoDb = { version: VERSION, users: [admin, ...clients], appointments: [], daysOff: [], slots: [], settings, sessionUserId: null }
 
   // umplem câteva zile lucrătoare din următoarele 3 săptămâni
   const pattern = [2, 1, 3, 0, 2, 1, 4, 2, 0, 3, 1, 2, 3]
@@ -117,10 +118,20 @@ function seed(): DemoDb {
     }
   }
 
+  // intervale deschise: programul standard în zilele lucrătoare din următoarele 60 de zile,
+  // plus o sâmbătă cu program scurt, ca exemplu
+  for (let i = 0, d = todayISO(); i <= 60; i++, d = addDaysISO(d, 1)) {
+    if (settings.workDays.includes(isoWeekday(d))) db.slots.push({ id: uid(), date: d, start: settings.workStart, end: settings.workEnd })
+  }
+  let saturday = addDaysISO(todayISO(), 3)
+  while (isoWeekday(saturday) !== 6) saturday = addDaysISO(saturday, 1)
+  db.slots.push({ id: uid(), date: saturday, start: '09:00', end: '13:00' })
+
   // o zi liberă marcată de proprietară, în săptămâna următoare
   let off = addDaysISO(todayISO(), 9)
   while (!settings.workDays.includes(isoWeekday(off))) off = addDaysISO(off, 1)
   db.daysOff.push({ date: off, note: 'Concediu' })
+  db.slots = db.slots.filter((x) => x.date !== off)
 
   save(db)
   return db
@@ -172,9 +183,15 @@ function busyFor(db: DemoDb, date: string): Busy[] {
     .map((a) => ({ start: toMin(a.start), blockedUntil: toMin(a.blockedUntil) }))
 }
 
+function windowsFor(db: DemoDb, date: string): Window[] {
+  return db.slots.filter((x) => x.date === date).map((x) => ({ start: toMin(x.start), end: toMin(x.end) }))
+}
+
 function dayAvailability(db: DemoDb, date: string) {
   const isOff = db.daysOff.some((d) => d.date === date)
-  return availabilityForDay(date, db.settings, busyFor(db, date), isOff, db.settings.defaultDurationMinutes, new Date())
+  return availabilityForDay(
+    date, db.settings, windowsFor(db, date), busyFor(db, date), isOff, db.settings.defaultDurationMinutes, new Date(),
+  )
 }
 
 // ---------------------------------------------------------------- rute
@@ -308,6 +325,50 @@ export async function demoFetch(input: RequestInfo | URL, init: RequestInit = {}
     if (dayOff) {
       db.daysOff = db.daysOff.filter((d) => d.date !== dayOff[1])
       if (method === 'PUT') db.daysOff.push({ date: dayOff[1], note: body?.note ?? null })
+      save(db)
+      return json(204)
+    }
+
+    // ---- intervale deschise
+    if (method === 'GET' && path === '/api/admin/slots') {
+      const from = q.get('from')!
+      const to = q.get('to')!
+      return json(200, db.slots.filter((x) => x.date >= from && x.date <= to).sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start)))
+    }
+
+    if (method === 'POST' && path === '/api/admin/slots') {
+      const { date, start, end } = body as { date: string; start: string; end: string }
+      if (start >= end) return problem(400, 'Ora de început trebuie să fie înaintea celei de final.')
+      if (date < todayISO()) return problem(400, 'Nu poți deschide intervale în zile care au trecut.')
+      const overlap = db.slots.some((x) => x.date === date && start < x.end && x.start < end)
+      if (overlap) return problem(409, 'Intervalul se suprapune cu unul existent în aceeași zi.')
+      const slot: OpenSlot = { id: uid(), date, start, end }
+      db.slots.push(slot)
+      save(db)
+      return json(201, slot)
+    }
+
+    if (method === 'POST' && path === '/api/admin/slots/apply-standard') {
+      const { to } = body as { from: string; to: string }
+      const from = body.from < todayISO() ? todayISO() : (body.from as string)
+      let filled = 0
+      for (let d = from; d <= to; d = addDaysISO(d, 1)) {
+        const skip = !db.settings.workDays.includes(isoWeekday(d)) || db.daysOff.some((x) => x.date === d) || db.slots.some((x) => x.date === d)
+        if (skip) continue
+        db.slots.push({ id: uid(), date: d, start: db.settings.workStart, end: db.settings.workEnd })
+        filled++
+      }
+      save(db)
+      return json(200, { daysFilled: filled })
+    }
+
+    const slotId = path.match(/^\/api\/admin\/slots\/([^/]+)$/)
+    if (method === 'DELETE' && slotId) {
+      const slot = db.slots.find((x) => x.id === slotId[1])
+      if (!slot) return problem(404, 'Intervalul nu există.')
+      const booked = db.appointments.some((a) => a.status === 'booked' && a.date === slot.date && a.start < slot.end && slot.start < a.end)
+      if (booked) return problem(409, 'În acest interval sunt programări. Anulează-le sau mută-le înainte să închizi intervalul.')
+      db.slots = db.slots.filter((x) => x.id !== slot.id)
       save(db)
       return json(204)
     }

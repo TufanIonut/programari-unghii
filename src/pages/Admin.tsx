@@ -4,26 +4,41 @@ import {
   schedulingApi,
   type AdminAppointment,
   type DayAvailability,
+  type OpenSlot,
   type SalonSettings,
 } from '../api/scheduling'
 import { Calendar, LegendItem, type DayInfo } from '../components/Calendar'
-import { WEEKDAYS_LONG, addMonths, formatLong, monthRange, parseISO, todayISO } from '../lib/dates'
+import { MONTHS, WEEKDAYS_LONG, addMonths, formatLong, monthRange, parseISO, todayISO } from '../lib/dates'
 
 const errorText = (err: unknown, fallback: string) => (err instanceof ApiError ? err.message : fallback)
 
+/** „08:00” → „8”, „08:30” → „8:30” — pentru textul mic din calendar */
+const shortTime = (t: string) => {
+  const [h, m] = t.split(':')
+  return m === '00' ? String(Number(h)) : `${Number(h)}:${m}`
+}
+
+const PRESETS = [
+  { start: '08:00', end: '16:00' },
+  { start: '09:00', end: '13:00' },
+  { start: '14:00', end: '20:00' },
+]
+
 export function Admin() {
-  // crește la fiecare salvare a programului, ca să se reîncarce calendarul
+  // crește la fiecare salvare a programului standard, ca să se reîncarce calendarul
   const [version, setVersion] = useState(0)
 
   return (
     <section>
       <span className="eyebrow">Administrare</span>
       <h1>Panoul salonului</h1>
-      <p className="muted">Alege o zi ca să vezi programările sau ca s-o marchezi liberă (X).</p>
+      <p className="muted">
+        Alege o zi și deschide intervalele în care primești cliente. Clientele văd doar orele din aceste intervale.
+      </p>
 
       <ScheduleCalendar version={version} />
 
-      <h2 className="section-title">Program de lucru</h2>
+      <h2 className="section-title">Program standard și reguli</h2>
       <SettingsForm onSaved={() => setVersion((v) => v + 1)} />
     </section>
   )
@@ -32,28 +47,38 @@ export function Admin() {
 // ---------------------------------------------------------------- calendar + zi
 
 function ScheduleCalendar({ version }: { version: number }) {
-  const today = parseISO(todayISO())
-  const [view, setView] = useState({ year: today.year, month: today.month })
+  const today = todayISO()
+  const t = parseISO(today)
+  const [view, setView] = useState({ year: t.year, month: t.month })
   const [days, setDays] = useState<Record<string, DayAvailability>>({})
   const [daysOff, setDaysOff] = useState<Record<string, string | null>>({})
+  const [slots, setSlots] = useState<Record<string, OpenSlot[]>>({})
   const [loading, setLoading] = useState(true)
+  const [monthMessage, setMonthMessage] = useState<string | null>(null)
+  const [filling, setFilling] = useState(false)
 
-  const [selected, setSelected] = useState<string>(todayISO())
+  const [selected, setSelected] = useState<string>(today)
   const [appointments, setAppointments] = useState<AdminAppointment[] | null>(null)
   const [dayError, setDayError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [note, setNote] = useState('')
+  const [newStart, setNewStart] = useState('08:00')
+  const [newEnd, setNewEnd] = useState('16:00')
 
   const loadMonth = useCallback(async (year: number, month: number) => {
     const { from, to } = monthRange(year, month)
     setLoading(true)
     try {
-      const [availability, off] = await Promise.all([
+      const [availability, off, open] = await Promise.all([
         schedulingApi.availability(from, to),
         schedulingApi.daysOff(from, to),
+        schedulingApi.slots(from, to),
       ])
       setDays(Object.fromEntries(availability.days.map((d) => [d.date, d])))
       setDaysOff(Object.fromEntries(off.map((d) => [d.date, d.note])))
+      const byDay: Record<string, OpenSlot[]> = {}
+      for (const s of open) (byDay[s.date] ??= []).push(s)
+      setSlots(byDay)
     } finally {
       setLoading(false)
     }
@@ -80,110 +105,208 @@ function ScheduleCalendar({ version }: { version: number }) {
 
   const getDay = (iso: string): DayInfo => {
     if (iso in daysOff) return { variant: 'off', hint: daysOff[iso] ?? 'Liber' }
-    const d = days[iso]
-    switch (d?.status) {
+    const open = slots[iso] ?? []
+    const hint = open.map((s) => `${shortTime(s.start)}–${shortTime(s.end)}`).join(', ') || undefined
+    switch (days[iso]?.status) {
       case 'available':
-        return { variant: 'available', hint: 'Are locuri' }
+        return { variant: 'available', hint }
       case 'full':
-        return { variant: 'full', hint: 'Complet' }
+        return { variant: 'full', hint: hint ? `${hint} · plin` : 'Complet' }
       case 'closed':
-        return { variant: 'closed' }
+        return { variant: 'closed', hint: iso >= today ? 'Închis' : undefined }
       default:
-        return { variant: 'past' }
+        return { variant: 'past', hint }
     }
   }
 
   const isOff = selected in daysOff
+  const isPast = selected < today
+  const daySlots = slots[selected] ?? []
 
-  const toggleDayOff = async () => {
+  const run = async (action: () => Promise<unknown>, fallback: string) => {
     setSaving(true)
     setDayError(null)
     try {
-      if (isOff) await schedulingApi.removeDayOff(selected)
-      else await schedulingApi.setDayOff(selected, note.trim() || undefined)
+      await action()
       await loadMonth(view.year, view.month)
     } catch (err) {
-      setDayError(errorText(err, 'Nu am putut salva ziua.'))
+      setDayError(errorText(err, fallback))
     } finally {
       setSaving(false)
     }
   }
 
+  const addSlot = (start: string, end: string) => {
+    if (start >= end) {
+      setDayError('Ora de început trebuie să fie înaintea celei de final.')
+      return
+    }
+    run(() => schedulingApi.addSlot(selected, start, end), 'Nu am putut adăuga intervalul.')
+  }
+
+  const toggleDayOff = () =>
+    run(
+      () => (isOff ? schedulingApi.removeDayOff(selected) : schedulingApi.setDayOff(selected, note.trim() || undefined)),
+      'Nu am putut salva ziua.',
+    )
+
+  const fillMonth = async () => {
+    const { from, to } = monthRange(view.year, view.month)
+    setFilling(true)
+    setMonthMessage(null)
+    try {
+      const { daysFilled } = await schedulingApi.applyStandard(from, to)
+      setMonthMessage(
+        daysFilled === 0
+          ? 'Toate zilele lucrătoare din lună aveau deja intervale.'
+          : `Am deschis ${daysFilled === 1 ? 'o zi' : `${daysFilled} zile`} cu programul standard.`,
+      )
+      await loadMonth(view.year, view.month)
+    } catch (err) {
+      setMonthMessage(errorText(err, 'Nu am putut completa luna.'))
+    } finally {
+      setFilling(false)
+    }
+  }
+
   return (
-    <div className="booking-layout">
-      <div className="card calendar-card">
-        <Calendar
-          year={view.year}
-          month={view.month}
-          getDay={getDay}
-          selected={selected}
-          onSelect={setSelected}
-          canPrev
-          canNext
-          onPrev={() => setView((v) => addMonths(v.year, v.month, -1))}
-          onNext={() => setView((v) => addMonths(v.year, v.month, 1))}
-          loading={loading}
-          legend={
-            <>
-              <LegendItem variant="available">Are locuri</LegendItem>
-              <LegendItem variant="full">Complet</LegendItem>
-              <LegendItem variant="off">Zi liberă</LegendItem>
-            </>
-          }
-        />
+    <>
+      <div className="month-tools">
+        <button type="button" className="btn btn-secondary" onClick={fillMonth} disabled={filling} aria-busy={filling}>
+          Completează {MONTHS[view.month]} cu programul standard
+        </button>
+        {monthMessage && <span className="muted">{monthMessage}</span>}
       </div>
 
-      <aside className="card slot-panel" aria-live="polite">
-        <h2 className="slot-title">{formatLong(selected)}</h2>
-        {dayError && <div className="alert">{dayError}</div>}
+      <div className="booking-layout">
+        <div className="card calendar-card">
+          <Calendar
+            year={view.year}
+            month={view.month}
+            getDay={getDay}
+            selected={selected}
+            onSelect={setSelected}
+            canPrev
+            canNext
+            onPrev={() => setView((v) => addMonths(v.year, v.month, -1))}
+            onNext={() => setView((v) => addMonths(v.year, v.month, 1))}
+            loading={loading}
+            legend={
+              <>
+                <LegendItem variant="available">Deschis, are locuri</LegendItem>
+                <LegendItem variant="full">Plin</LegendItem>
+                <LegendItem variant="off">Zi liberă</LegendItem>
+              </>
+            }
+          />
+        </div>
 
-        {appointments === null ? (
-          <p className="muted">Se încarcă…</p>
-        ) : appointments.length === 0 ? (
-          <p className="muted">Nicio programare în ziua asta.</p>
-        ) : (
-          <ul className="appointment-list">
-            {appointments.map((a) => (
-              <li key={a.id} className="appointment-item">
-                <div>
-                  <strong>
-                    {a.start} – {a.end}
-                  </strong>
-                  <span>{a.clientName}</span>
-                  <br />
-                  <span className="muted" style={{ fontSize: '0.85rem' }}>
-                    {a.email}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <aside className="card slot-panel" aria-live="polite">
+          <h2 className="slot-title">{formatLong(selected)}</h2>
+          {dayError && <div className="alert">{dayError}</div>}
 
-        <div className="day-off-box">
+          {/* ---- intervale deschise ---- */}
+          <h3 className="panel-subtitle">Intervale deschise</h3>
           {isOff ? (
-            <p>
-              Ziua e marcată <strong>liberă</strong>
-              {daysOff[selected] ? ` (${daysOff[selected]})` : ''}. Clientele nu se pot programa.
-            </p>
+            <p className="muted">Ziua e marcată liberă — clientele nu se pot programa.</p>
+          ) : daySlots.length === 0 ? (
+            <p className="muted">{isPast ? 'Ziua a fost închisă.' : 'Ziua e închisă. Adaugă un interval ca să te poată programa clientele.'}</p>
           ) : (
-            <div className="field">
-              <label htmlFor="note">Motiv (opțional)</label>
-              <input id="note" placeholder="Crăciun, concediu…" value={note} onChange={(e) => setNote(e.target.value)} />
+            <ul className="window-list">
+              {daySlots.map((s) => (
+                <li key={s.id} className="window-chip">
+                  <span>
+                    {s.start} – {s.end}
+                  </span>
+                  {!isPast && (
+                    <button
+                      type="button"
+                      aria-label={`Închide intervalul ${s.start}–${s.end}`}
+                      onClick={() => run(() => schedulingApi.deleteSlot(s.id), 'Nu am putut închide intervalul.')}
+                      disabled={saving}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {!isPast && !isOff && (
+            <div className="window-add">
+              <div className="window-presets" role="group" aria-label="Intervale rapide">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.start}
+                    type="button"
+                    className="chip"
+                    onClick={() => addSlot(p.start, p.end)}
+                    disabled={saving}
+                  >
+                    + {shortTime(p.start)}–{shortTime(p.end)}
+                  </button>
+                ))}
+              </div>
+              <div className="window-custom">
+                <input type="time" step={600} aria-label="De la" value={newStart} onChange={(e) => setNewStart(e.target.value)} />
+                <span aria-hidden="true">–</span>
+                <input type="time" step={600} aria-label="Până la" value={newEnd} onChange={(e) => setNewEnd(e.target.value)} />
+                <button type="button" className="btn btn-primary" onClick={() => addSlot(newStart, newEnd)} disabled={saving}>
+                  Adaugă
+                </button>
+              </div>
             </div>
           )}
-          {!isOff && appointments && appointments.length > 0 && (
-            <p className="field-error">
-              Ai {appointments.length === 1 ? 'o programare' : `${appointments.length} programări`} în ziua asta.
-              Ele rămân valabile — anunță clientele dacă nu lucrezi.
-            </p>
+
+          {/* ---- programările zilei ---- */}
+          <h3 className="panel-subtitle">Programări</h3>
+          {appointments === null ? (
+            <p className="muted">Se încarcă…</p>
+          ) : appointments.length === 0 ? (
+            <p className="muted">Nicio programare în ziua asta.</p>
+          ) : (
+            <ul className="appointment-list">
+              {appointments.map((a) => (
+                <li key={a.id} className="appointment-item">
+                  <div>
+                    <strong>
+                      {a.start} – {a.end}
+                    </strong>
+                    <span>{a.clientName}</span>
+                    <br />
+                    <span className="muted" style={{ fontSize: '0.85rem' }}>
+                      {a.email}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
-          <button type="button" className="btn btn-secondary btn-block" onClick={toggleDayOff} disabled={saving}>
-            {isOff ? 'Lucrez în ziua asta' : 'Marchează zi liberă (X)'}
-          </button>
-        </div>
-      </aside>
-    </div>
+
+          {/* ---- zi liberă ---- */}
+          {!isPast && (
+            <div className="day-off-box">
+              {!isOff && (
+                <div className="field">
+                  <label htmlFor="note">Zi liberă — motiv (opțional)</label>
+                  <input id="note" placeholder="Crăciun, concediu…" value={note} onChange={(e) => setNote(e.target.value)} />
+                </div>
+              )}
+              {!isOff && appointments && appointments.length > 0 && (
+                <p className="field-error">
+                  Ai {appointments.length === 1 ? 'o programare' : `${appointments.length} programări`} în ziua asta.
+                  Ele rămân valabile — anunță clientele dacă nu lucrezi.
+                </p>
+              )}
+              <button type="button" className="btn btn-secondary btn-block" onClick={toggleDayOff} disabled={saving}>
+                {isOff ? 'Lucrez în ziua asta' : 'Marchează zi liberă (X)'}
+              </button>
+            </div>
+          )}
+        </aside>
+      </div>
+    </>
   )
 }
 
@@ -265,6 +388,11 @@ function SettingsForm({ onSaved }: { onSaved: () => void }) {
         </div>
       )}
 
+      <p className="muted">
+        Programul standard se folosește doar la „Completează luna”: deschide automat intervalul de mai jos în zilele
+        bifate. Fiecare zi o poți modifica apoi separat din calendar.
+      </p>
+
       <div className="form-row">
         <div className="field">
           <label htmlFor="workStart">Începe la</label>
@@ -295,7 +423,7 @@ function SettingsForm({ onSaved }: { onSaved: () => void }) {
 
       <div className="settings-actions">
         <button type="submit" className="btn btn-primary" disabled={saving} aria-busy={saving}>
-          {saving ? 'Se salvează…' : 'Salvează programul'}
+          {saving ? 'Se salvează…' : 'Salvează'}
         </button>
         {saved && <span className="muted">Salvat.</span>}
       </div>

@@ -39,6 +39,13 @@ export interface SalonSettings {
   defaultDurationMinutes: number
 }
 
+export interface OpenSlot {
+  id: string
+  date: string
+  start: string
+  end: string
+}
+
 export interface DayOff {
   date: string
   note: string | null
@@ -56,5 +63,11 @@ export const schedulingApi = {
   daysOff: (from: string, to: string) => api<DayOff[]>(`/api/admin/days-off?from=${from}&to=${to}`),
   setDayOff: (date: string, note?: string) => api<void>(`/api/admin/days-off/${date}`, { method: 'PUT', body: { note } }),
   removeDayOff: (date: string) => api<void>(`/api/admin/days-off/${date}`, { method: 'DELETE' }),
+  slots: (from: string, to: string) => api<OpenSlot[]>(`/api/admin/slots?from=${from}&to=${to}`),
+  addSlot: (date: string, start: string, end: string) =>
+    api<OpenSlot>('/api/admin/slots', { method: 'POST', body: { date, start, end } }),
+  deleteSlot: (id: string) => api<void>(`/api/admin/slots/${id}`, { method: 'DELETE' }),
+  applyStandard: (from: string, to: string) =>
+    api<{ daysFilled: number }>('/api/admin/slots/apply-standard', { method: 'POST', body: { from, to } }),
   dayAppointments: (date: string) => api<AdminAppointment[]>(`/api/admin/appointments?date=${date}`),
 }

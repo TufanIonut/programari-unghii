@@ -675,6 +675,84 @@ main { padding-block: clamp(32px, 6vw, 64px); }
 .section-title { margin-top: 40px; }
 
 /* ---------- Administrare ---------- */
+.month-tools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 20px 0 16px;
+}
+
+.month-tools .btn::first-letter { text-transform: uppercase; }
+
+.panel-subtitle {
+  font-family: var(--ff-body);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--plum-muted);
+  margin: 22px 0 10px;
+}
+
+.window-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.window-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 6px 0 14px;
+  border-radius: 999px;
+  background: var(--pink);
+  font-weight: 500;
+}
+
+.window-chip button {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 0;
+  background: color-mix(in srgb, var(--plum) 12%, transparent);
+  color: var(--plum);
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.window-chip button:hover { background: var(--plum); color: var(--ivory); }
+
+.window-add { margin-top: 14px; display: grid; gap: 10px; }
+
+.window-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.window-presets .chip { text-transform: none; }
+.window-presets .chip:hover { background: var(--pink-soft); }
+
+.window-custom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.window-custom input {
+  height: 44px;
+  min-width: 0;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--plum);
+  font: 400 0.95rem var(--ff-body);
+}
+
+.window-custom .btn { padding: 0 16px; }
 .day-off-box {
   margin-top: 20px;
   padding-top: 18px;
