@@ -1,4 +1,5 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { IS_DEMO } from '../api/client'
 import { useAuth } from '../auth/context'
 
 export const SALON_NAME = 'Studio Unghii'
@@ -14,12 +15,27 @@ export function Layout() {
 
   const navClass = ({ isActive }: { isActive: boolean }) => `btn btn-ghost${isActive ? ' active' : ''}`
 
+  const resetDemo = async () => {
+    if (!window.confirm('Ștergi datele demo de pe acest dispozitiv și o iei de la capăt?')) return
+    const { resetDemo } = await import('../demo/mockServer')
+    resetDemo()
+    window.location.reload()
+  }
+
   return (
     <>
+      {IS_DEMO && (
+        <div className="demo-banner" role="note">
+          <span>Versiune demo — datele sunt simulate și rămân doar pe acest dispozitiv.</span>
+          <button type="button" onClick={resetDemo}>
+            Resetează
+          </button>
+        </div>
+      )}
       <header className="header">
         <div className="container header-inner">
           <Link to="/" className="brand">
-            <img src="/favicon.svg" alt="" />
+            <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" />
             <span>{SALON_NAME}</span>
           </Link>
 

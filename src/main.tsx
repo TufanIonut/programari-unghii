@@ -7,7 +7,8 @@ import './index.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
+    {/* pe GitHub Pages site-ul stă într-un subfolder (/programari-unghii/) */}
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
       <AuthProvider>
         <App />
       </AuthProvider>

@@ -15,6 +15,8 @@ export interface AuthState {
   login: (email: string, password: string) => Promise<User>
   register: (input: RegisterInput) => Promise<User>
   logout: () => Promise<void>
+  /** doar în versiunea demo: intră direct în contul de administrator */
+  loginDemoAdmin: () => Promise<User>
 }
 
 export const AuthContext = createContext<AuthState | null>(null)

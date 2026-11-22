@@ -44,6 +44,14 @@ export class ApiError extends Error {
   }
 }
 
+/** Versiunea demo (GitHub Pages): fără backend, datele sunt simulate în browser. */
+export const IS_DEMO = import.meta.env.VITE_DEMO === 'true'
+
+// În demo, cererile merg la serverul simulat; în build-ul normal ramura e eliminată complet.
+const http: typeof fetch = IS_DEMO
+  ? (input, init) => import('../demo/mockServer').then((m) => m.demoFetch(input, init))
+  : (input, init) => fetch(input, init)
+
 let accessToken: string | null = null
 let refreshInFlight: Promise<AuthResponse | null> | null = null
 let sessionListener: ((session: AuthResponse | null) => void) | null = null
@@ -63,7 +71,7 @@ export function setSession(session: AuthResponse | null) {
  * serverul rotește token-ul, iar două refresh-uri cu același cookie ar închide sesiunea.
  */
 export function refreshSession(): Promise<AuthResponse | null> {
-  refreshInFlight ??= fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' })
+  refreshInFlight ??= http('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' })
     .then(async (res) => (res.ok ? ((await res.json()) as AuthResponse) : null))
     .catch(() => null)
     .then((session) => {
@@ -83,7 +91,7 @@ interface RequestOptions {
 
 export async function api<T>(path: string, { method = 'GET', body }: RequestOptions = {}): Promise<T> {
   const send = () =>
-    fetch(path, {
+    http(path, {
       method,
       credentials: 'same-origin',
       headers: {
