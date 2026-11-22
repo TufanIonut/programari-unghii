@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
-import { profileApi, type WorkEstimate } from '../api/profile'
+import { profileApi, type Pricing, type WorkEstimate } from '../api/profile'
 import { schedulingApi, type Appointment, type DayAvailability } from '../api/scheduling'
 import { useAuth } from '../auth/context'
 import { Calendar, LegendItem, type DayInfo } from '../components/Calendar'
-import { addDaysISO, addMonths, formatDuration, formatLong, formatShort, monthRange, parseISO, todayISO } from '../lib/dates'
+import { MONTHS, addDaysISO, addMonths, formatDuration, formatLong, formatShort, monthRange, parseISO, todayISO } from '../lib/dates'
 
 const MAX_MONTHS_AHEAD = 3
-const HEADLINE = 'Lucioase, ca oja proaspătă.'
-const POLISHES = ['#e8c4c4', '#6b3f52', '#c98a96']
+/** Titlul: cuvintele între _ sunt cursive. */
+const HEADLINE = 'Unghii _care_ vorbesc.'
+
+const capitalize = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
 
 function slotsHint(n: number) {
   return n === 1 ? '1 loc liber' : `${n} locuri libere`
@@ -17,30 +19,21 @@ function slotsHint(n: number) {
 
 /** Titlul apare cuvânt cu cuvânt (animație doar CSS). */
 function RevealTitle({ text }: { text: string }) {
+  const plain = text.replaceAll('_', '')
   return (
-    <h1 aria-label={text}>
-      {text.split(' ').map((word, i) => (
-        <span key={i} aria-hidden="true">
-          <span className="reveal-word" style={{ '--i': i } as CSSProperties}>
-            {word}
-          </span>{' '}
-        </span>
-      ))}
+    <h1 aria-label={plain}>
+      {text.split(' ').map((word, i) => {
+        const italic = word.startsWith('_')
+        const clean = word.replaceAll('_', '')
+        return (
+          <span key={i} aria-hidden="true">
+            <span className="reveal-word" style={{ '--i': i } as CSSProperties}>
+              {italic ? <em>{clean}</em> : clean}
+            </span>{' '}
+          </span>
+        )
+      })}
     </h1>
-  )
-}
-
-function Bottles() {
-  return (
-    <div className="bottles" aria-hidden="true">
-      {POLISHES.map((color) => (
-        <div key={color} className="bottle" style={{ '--polish': color } as CSSProperties}>
-          <div className="bottle-cap" />
-          <div className="bottle-neck" />
-          <div className="bottle-body" />
-        </div>
-      ))}
-    </div>
   )
 }
 
@@ -70,7 +63,12 @@ export function Home() {
   const [duration, setDuration] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [nextSlot, setNextSlot] = useState<{ date: string; time: string } | null>(null)
+  const [nextSlot, setNextSlot] = useState<{ date: string; time: string } | null | undefined>(undefined)
+  const [pricing, setPricing] = useState<Pricing | null>(null)
+
+  useEffect(() => {
+    profileApi.pricing().then(setPricing).catch(() => setPricing(null))
+  }, [])
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
@@ -200,28 +198,21 @@ export function Home() {
 
   return (
     <div className="has-sticky-cta">
-      <section className="gloss-hero">
+      <div className="masthead">
+        <span>Programări online</span>
+        <span>
+          {MONTHS[today.month]} {today.year}
+        </span>
+      </div>
+
+      <section className="ed-hero">
+        <RevealTitle text={HEADLINE} />
         <div>
-          <span className="eyebrow">Programări online</span>
-          <RevealTitle text={HEADLINE} />
-          <p className="lead muted">
+          <p className="lead">
             Alegi ziua, iar noi îți arătăm doar orele la care lucrarea ta încape în program
             {duration ? ` (cam ${formatDuration(duration)})` : ''}. Plătești la salon, în ziua programării.
           </p>
-
-          {nextSlot && (
-            <button type="button" className="next-slot" onClick={openNextSlot}>
-              <span className="next-slot-dot" aria-hidden="true" />
-              <span>
-                <small>Primul loc liber</small>
-                <strong>
-                  {formatShort(nextSlot.date)}, ora {nextSlot.time}
-                </strong>
-              </span>
-            </button>
-          )}
-
-          <div className="hero-actions">
+          <div className="ed-hero-actions">
             <a href="#calendar" className="btn btn-primary">
               Vezi zilele libere
             </a>
@@ -232,9 +223,111 @@ export function Home() {
             )}
           </div>
         </div>
-        <Bottles />
       </section>
 
+      <section className="bento" aria-label="Pe scurt">
+        <button
+          type="button"
+          className="tile tile-plum tile-wide"
+          style={{ '--i': 0 } as CSSProperties}
+          onClick={nextSlot ? openNextSlot : () => document.getElementById('calendar')?.scrollIntoView({ behavior: 'smooth' })}
+        >
+          <span className="tile-label">Următorul loc liber</span>
+          <span className="tile-big">
+            {nextSlot === undefined ? '…' : nextSlot ? `${capitalize(formatShort(nextSlot.date))} · ${nextSlot.time}` : 'Vezi calendarul'}
+          </span>
+          <span className="tile-foot">
+            <span>{nextSlot ? 'Apasă și te programezi' : 'Locurile noi apar în calendar'}</span>
+            <span className="tile-arrow" aria-hidden="true">
+              →
+            </span>
+          </span>
+        </button>
+
+        {user?.role === 'admin' ? (
+          <Link to="/admin" className="tile tile-pink" style={{ '--i': 1 } as CSSProperties}>
+            <span className="tile-label">Administrare</span>
+            <span className="tile-big">Ziua de azi</span>
+            <span className="tile-foot">
+              <span>Programări, intervale, prețuri</span>
+              <span className="tile-arrow" aria-hidden="true">→</span>
+            </span>
+          </Link>
+        ) : work ? (
+          <Link to="/fisa" className="tile tile-pink" style={{ '--i': 1 } as CSSProperties}>
+            <span className="tile-label">Lucrarea ta</span>
+            <span className="tile-big">{work.price} lei</span>
+            <span className="tile-foot">
+              <span>
+                {work.serviceName} · {formatDuration(work.minutes)}
+              </span>
+              <span className="tile-arrow" aria-hidden="true">→</span>
+            </span>
+          </Link>
+        ) : (
+          <Link to={user ? '/fisa' : '/inregistrare'} className="tile tile-pink" style={{ '--i': 1 } as CSSProperties}>
+            <span className="tile-label">Fișa de cunoaștere</span>
+            <span className="tile-big">3 pași</span>
+            <span className="tile-foot">
+              <span>Din ea aflăm durata și prețul</span>
+              <span className="tile-arrow" aria-hidden="true">→</span>
+            </span>
+          </Link>
+        )}
+
+        <div className="tile" style={{ '--i': 2 } as CSSProperties}>
+          <span className="tile-label">Card de fidelitate</span>
+          <span className="loyalty-dots" aria-hidden="true">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <i key={i} />
+            ))}
+          </span>
+          <span className="tile-foot">
+            <span>În curând: fiecare vizită se bifează cu un cod QR.</span>
+          </span>
+        </div>
+
+        {pricing && (
+          <div className="tile tile-full" style={{ '--i': 3 } as CSSProperties}>
+            <div className="tile-head">
+              <span className="tile-label">Prețuri</span>
+              <span className="tile-big">
+                de la <em>{Math.min(...pricing.services.map((x) => x.price))} lei</em>
+              </span>
+            </div>
+            <ul className="price-list">
+              {pricing.services.map((x) => (
+                <li key={x.code}>
+                  <span>
+                    {x.name} <small>· {formatDuration(x.minutes)}</small>
+                  </span>
+                  <span className="dots" aria-hidden="true" />
+                  <strong>{x.price} lei</strong>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      {pricing && (
+        <div className="ticker" aria-hidden="true">
+          <div className="ticker-track">
+            {[0, 1].flatMap((k) =>
+              [...pricing.services.map((x) => x.name), 'Nail art', 'Pauză de 10 minute între cliente'].map((t) => (
+                <span key={`${k}-${t}`}>{t}</span>
+              )),
+            )}
+          </div>
+        </div>
+      )}
+
+      <header className="section-head">
+        <span>01</span>
+        <h2>
+          Alege <em>ziua</em>
+        </h2>
+      </header>
       <section id="calendar" className="booking-layout">
         <div className="card calendar-card">
           {loadError && <div className="alert">{loadError}</div>}
