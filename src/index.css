@@ -1,9 +1,12 @@
 /* ============================================================
-   Paleta: 3 culori
-   - roz pudrat  #E8C4C4  → suprafețe, accente, zile disponibile
+   Tema „Lucios tactil” — totul arată ca oja proaspătă: butoane jeleu,
+   suprafețe lucioase, carduri de sticlă mată, apăsări cu arc.
+
+   Paleta (3 culori):
+   - roz pudrat  #E8C4C4  → suprafețe, zile disponibile
    - prună       #6B3F52  → text, butoane principale, selecție
    - ivoriu      #FBF7F3  → fundal
-   Restul nuanțelor sunt derivate din acestea trei (transparențe / amestecuri).
+   Restul nuanțelor sunt amestecuri ale acestor trei (plus alb pentru reflexii).
    ============================================================ */
 :root {
   --pink: #e8c4c4;
@@ -12,18 +15,27 @@
 
   --pink-soft: color-mix(in srgb, var(--pink) 35%, var(--ivory));
   --pink-strong: color-mix(in srgb, var(--pink) 70%, var(--plum));
-  --plum-hover: color-mix(in srgb, var(--plum) 85%, black);
+  --plum-light: color-mix(in srgb, var(--plum) 78%, white);
+  --plum-deep: color-mix(in srgb, var(--plum) 85%, black);
   --plum-muted: color-mix(in srgb, var(--plum) 70%, var(--ivory));
   --line: color-mix(in srgb, var(--pink) 80%, var(--ivory));
 
   --danger: #a3354a;
 
+  /* ---- luciu: gradient de bază + reflexie interioară + umbră colorată ---- */
+  --gloss-plum: linear-gradient(180deg, var(--plum-light) 0%, var(--plum) 52%, var(--plum-deep) 100%);
+  --gloss-pink: linear-gradient(180deg, color-mix(in srgb, var(--pink) 45%, white) 0%, var(--pink) 58%, color-mix(in srgb, var(--pink) 88%, var(--plum)) 100%);
+  --gloss-ivory: linear-gradient(180deg, white 0%, var(--ivory) 100%);
+  --shine-inset: inset 0 1px 0 rgb(255 255 255 / 0.55), inset 0 -3px 8px rgb(107 63 82 / 0.16);
+  --drop-plum: 0 10px 22px -8px rgb(107 63 82 / 0.6);
+  --drop-soft: 0 14px 40px -12px rgb(107 63 82 / 0.28);
+
   --ff-display: 'Playfair Display', Georgia, serif;
   --ff-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  --radius: 10px;
-  --radius-lg: 18px;
-  --shadow: 0 10px 30px color-mix(in srgb, var(--plum) 12%, transparent);
+  --radius: 14px;
+  --radius-lg: 26px;
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --transition: 0.2s ease;
 
   color-scheme: light;
@@ -42,8 +54,13 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--ivory);
   line-height: 1.6;
+  /* fundal: ivoriu cu „pete” mari de roz, ca reflexii de lac */
+  background:
+    radial-gradient(60vw 60vw at 100% -10%, color-mix(in srgb, var(--pink) 55%, transparent), transparent 60%),
+    radial-gradient(50vw 50vw at -10% 40%, color-mix(in srgb, var(--pink) 35%, transparent), transparent 60%),
+    var(--ivory);
+  background-attachment: fixed;
 }
 
 h1,
@@ -51,11 +68,11 @@ h2,
 h3 {
   font-family: var(--ff-display);
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.15;
   margin: 0 0 0.5em;
 }
 
-h1 { font-size: clamp(2rem, 5vw, 3.2rem); }
+h1 { font-size: clamp(2.2rem, 6vw, 3.6rem); letter-spacing: -0.01em; }
 h2 { font-size: clamp(1.5rem, 3.5vw, 2rem); }
 
 a {
@@ -72,50 +89,84 @@ p { margin: 0 0 1em; }
   margin-inline: auto;
 }
 
-/* ---------- Butoane ---------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--plum);
+  outline-offset: 3px;
+}
+
+/* ---------- Butoane „jeleu” ---------- */
 .btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 0 22px;
+  min-height: 46px;
+  padding: 0 24px;
   border-radius: 999px;
-  border: 1px solid var(--plum);
-  font: 500 0.95rem var(--ff-body);
+  border: 0;
+  font: 600 0.95rem var(--ff-body);
+  letter-spacing: 0.01em;
   text-decoration: none;
   cursor: pointer;
-  transition: background var(--transition), color var(--transition), transform var(--transition);
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform 0.35s var(--spring), box-shadow var(--transition), filter var(--transition);
 }
 
-.btn:active { transform: scale(0.98); }
+/* reflexia de sus, ca pe o unghie lăcuită */
+.btn::before {
+  content: '';
+  position: absolute;
+  inset: 2px 10% auto;
+  height: 45%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0));
+  pointer-events: none;
+  z-index: -1;
+}
+
+.btn:hover { transform: translateY(-2px); }
+.btn:active { transform: translateY(1px) scale(0.96); transition-duration: 0.08s; }
 
 .btn-primary {
-  background: var(--plum);
+  background: var(--gloss-plum);
   color: var(--ivory);
+  box-shadow: var(--shine-inset), var(--drop-plum);
 }
-.btn-primary:hover { background: var(--plum-hover); }
+.btn-primary:hover { filter: brightness(1.08); }
 
 .btn-secondary {
-  background: transparent;
+  background: var(--gloss-ivory);
   color: var(--plum);
+  box-shadow: var(--shine-inset), inset 0 0 0 1px var(--line), 0 6px 16px -8px rgb(107 63 82 / 0.35);
 }
-.btn-secondary:hover { background: var(--pink-soft); }
 
 .btn-ghost {
-  border-color: transparent;
   background: transparent;
   color: var(--plum);
   padding: 0 14px;
+  font-weight: 500;
 }
-.btn-ghost:hover { background: var(--pink-soft); }
+.btn-ghost::before { display: none; }
+.btn-ghost:hover { background: rgb(255 255 255 / 0.6); }
 
-.btn[aria-busy='true'] { opacity: 0.7; cursor: progress; }
+.btn[aria-busy='true'],
+.btn:disabled { opacity: 0.7; cursor: progress; transform: none; }
 
-:focus-visible {
-  outline: 2px solid var(--plum);
-  outline-offset: 2px;
-}
+.btn-block { width: 100%; }
 
 /* ---------- Formulare ---------- */
 .field {
@@ -129,14 +180,16 @@ p { margin: 0 0 1em; }
   font-weight: 500;
 }
 
-.field input {
+.field input,
+.window-custom input {
   width: 100%;
   min-width: 0;
-  height: 46px;
-  padding: 0 14px;
+  height: 48px;
+  padding: 0 16px;
   border-radius: var(--radius);
   border: 1px solid var(--line);
-  background: white;
+  background: rgb(255 255 255 / 0.85);
+  box-shadow: inset 0 2px 4px rgb(107 63 82 / 0.06);
   color: var(--plum);
   font: 400 1rem var(--ff-body);
   transition: border-color var(--transition), box-shadow var(--transition);
@@ -144,10 +197,11 @@ p { margin: 0 0 1em; }
 
 .field input:hover { border-color: var(--pink-strong); }
 
-.field input:focus {
+.field input:focus,
+.window-custom input:focus {
   outline: none;
   border-color: var(--plum);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pink) 60%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--pink) 55%, transparent);
 }
 
 .field input[aria-invalid='true'] { border-color: var(--danger); }
@@ -176,13 +230,15 @@ p { margin: 0 0 1em; }
   margin-bottom: 16px;
 }
 
-/* ---------- Carduri ---------- */
+/* ---------- Carduri de sticlă mată ---------- */
 .card {
-  background: white;
-  border: 1px solid var(--line);
+  background: rgb(255 255 255 / 0.72);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid rgb(255 255 255 / 0.9);
   border-radius: var(--radius-lg);
   padding: clamp(20px, 4vw, 36px);
-  box-shadow: var(--shadow);
+  box-shadow: inset 0 1px 0 white, var(--drop-soft);
 }
 
 /* ---------- Versiunea demo ---------- */
@@ -190,21 +246,21 @@ p { margin: 0 0 1em; }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
-  padding: 8px 16px;
-  background: var(--plum);
+  padding: 6px 16px;
+  background: var(--gloss-plum);
   color: var(--ivory);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   text-align: center;
 }
 
 .demo-banner button {
-  border: 1px solid color-mix(in srgb, var(--ivory) 60%, transparent);
+  border: 1px solid rgb(251 247 243 / 0.6);
   background: transparent;
   color: var(--ivory);
   border-radius: 999px;
-  padding: 3px 12px;
+  padding: 2px 12px;
   font: inherit;
   cursor: pointer;
 }
@@ -222,10 +278,11 @@ p { margin: 0 0 1em; }
 .header {
   position: sticky;
   top: 0;
-  z-index: 10;
-  background: color-mix(in srgb, var(--ivory) 88%, transparent);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--line);
+  z-index: 20;
+  background: rgb(251 247 243 / 0.7);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  border-bottom: 1px solid rgb(255 255 255 / 0.8);
 }
 
 .header-inner {
@@ -245,7 +302,12 @@ p { margin: 0 0 1em; }
   text-decoration: none;
 }
 
-.brand img { width: 32px; height: 32px; }
+.brand img {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  box-shadow: var(--drop-plum);
+}
 
 .nav {
   display: flex;
@@ -255,54 +317,44 @@ p { margin: 0 0 1em; }
   justify-content: flex-end;
 }
 
-.nav a.active { background: var(--pink-soft); }
+.nav a.active { background: rgb(255 255 255 / 0.75); box-shadow: inset 0 0 0 1px var(--line); }
 
 @media (max-width: 560px) {
   .brand span { display: none; }
-  .nav .btn { padding: 0 12px; font-size: 0.9rem; }
+  .nav .btn { padding: 0 12px; font-size: 0.88rem; min-height: 40px; }
 }
 
 /* ---------- Pagini ---------- */
-main { padding-block: clamp(32px, 6vw, 64px); }
+main { padding-block: clamp(28px, 6vw, 60px); }
 
-.hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: clamp(24px, 5vw, 56px);
-  align-items: center;
-}
+/* fiecare pagină intră ușor (tranziție la schimbarea rutei) */
+/* „backwards”, nu „both”: după animație nu rămâne nicio transformare pe container,
+   altfel elementele fixe (foaia cu ore, bara de jos) s-ar poziționa față de pagină, nu de ecran */
+.page { animation: page-in 0.45s var(--spring) backwards; }
 
-.hero-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 24px;
-}
-
-.hero-visual {
-  aspect-ratio: 1;
-  border-radius: 50% 50% var(--radius-lg) var(--radius-lg);
-  background: var(--pink);
-  display: grid;
-  place-items: center;
-  box-shadow: var(--shadow);
-}
-
-.hero-visual svg { width: 55%; height: auto; }
-
-@media (max-width: 760px) {
-  .hero { grid-template-columns: 1fr; }
-  .hero-visual { max-width: 320px; margin-inline: auto; width: 100%; }
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(14px); }
 }
 
 .eyebrow {
-  display: inline-block;
-  padding: 4px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
   border-radius: 999px;
-  background: var(--pink-soft);
-  font-size: 0.85rem;
-  font-weight: 500;
+  background: var(--gloss-ivory);
+  box-shadow: var(--shine-inset), inset 0 0 0 1px var(--line);
+  font-size: 0.82rem;
+  font-weight: 600;
   margin-bottom: 16px;
+}
+
+.eyebrow::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gloss-plum);
 }
 
 .auth-page {
@@ -310,7 +362,7 @@ main { padding-block: clamp(32px, 6vw, 64px); }
   margin-inline: auto;
 }
 
-.auth-page .card h1 { font-size: 2rem; }
+.auth-page .card h1 { font-size: 2.1rem; }
 
 .auth-switch {
   text-align: center;
@@ -318,11 +370,8 @@ main { padding-block: clamp(32px, 6vw, 64px); }
   font-size: 0.95rem;
 }
 
-.btn-block { width: 100%; }
-
 .footer {
-  border-top: 1px solid var(--line);
-  padding-block: 24px;
+  padding-block: 28px;
   font-size: 0.85rem;
   color: var(--plum-muted);
   text-align: center;
@@ -343,104 +392,204 @@ main { padding-block: clamp(32px, 6vw, 64px); }
 }
 
 .info-tile {
-  background: var(--pink-soft);
-  border-radius: var(--radius);
-  padding: 18px;
+  background: var(--gloss-pink);
+  box-shadow: var(--shine-inset), 0 10px 24px -14px rgb(107 63 82 / 0.5);
+  border-radius: var(--radius-lg);
+  padding: 20px;
 }
 
 .info-tile strong { display: block; font-size: 1.05rem; margin-bottom: 4px; }
 
-/* ---------- Calendar ---------- */
-.booking-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: clamp(20px, 4vw, 48px);
-  align-items: center;
-  margin-bottom: clamp(28px, 5vw, 48px);
-}
+.section-title { margin-top: 44px; }
 
-.booking-intro { max-width: 680px; margin-bottom: 28px; }
+/* ---------- Hero: sticluțe de ojă ---------- */
+.gloss-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: clamp(16px, 4vw, 48px);
+  align-items: center;
+  margin-bottom: clamp(28px, 6vw, 56px);
+}
 
 @media (max-width: 760px) {
-  .booking-hero { grid-template-columns: 1fr; }
-  .booking-hero .nail-hero { order: -1; }
+  .gloss-hero { grid-template-columns: 1fr; }
+  .gloss-hero .bottles { order: -1; height: auto; padding-top: 14px; }
 }
 
-#calendar { scroll-margin-top: 90px; }
+.gloss-hero h1 { margin-bottom: 0.35em; }
 
-/* ---------- Scena 3D: pensula pe unghie ---------- */
-.nail-hero { display: grid; gap: 14px; justify-items: center; }
-
-.nail-stage {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 5 / 4;
-  max-height: 420px;
-  border-radius: 28px;
-  overflow: hidden;
-  background:
-    radial-gradient(120% 90% at 70% 20%, color-mix(in srgb, white 55%, var(--pink-soft)) 0%, var(--pink-soft) 55%, color-mix(in srgb, var(--pink) 70%, var(--pink-soft)) 100%);
-  box-shadow: var(--shadow);
+/* cuvintele titlului apar pe rând */
+.reveal-word {
+  display: inline-block;
+  animation: word-in 0.7s var(--spring) both;
+  animation-delay: calc(var(--i) * 90ms + 80ms);
 }
 
-.nail-stage canvas { display: block; }
-
-.nail-loading,
-.nail-fallback {
-  position: absolute;
-  inset: 0;
-  margin: auto;
+@keyframes word-in {
+  from { opacity: 0; transform: translateY(0.45em) rotate(2deg); filter: blur(4px); }
 }
 
-.nail-loading {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: var(--pink);
-  animation: nail-pulse 1.4s ease-in-out infinite;
+.gloss-hero .lead { font-size: 1.05rem; max-width: 46ch; }
+
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 22px;
 }
 
-.nail-fallback { width: 40%; height: 70%; }
-
-@keyframes nail-pulse {
-  50% { transform: scale(0.85); opacity: 0.6; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .nail-loading { animation: none; }
-}
-
-.polish-picker { display: flex; gap: 12px; }
-
-.polish-swatch {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 3px solid var(--ivory);
-  background: var(--swatch);
-  box-shadow: 0 0 0 1px var(--line);
-  cursor: pointer;
-  transition: transform var(--transition), box-shadow var(--transition);
-}
-
-.polish-swatch:hover { transform: translateY(-2px); }
-.polish-swatch.is-current { box-shadow: 0 0 0 2px var(--plum); }
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
+/* „următorul loc liber” — un chip lucios pe care apeși direct */
+.next-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 10px 18px 10px 10px;
   border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.75);
+  box-shadow: var(--shine-inset), inset 0 0 0 1px var(--line), var(--drop-soft);
+  color: var(--plum);
+  font: 500 0.92rem var(--ff-body);
+  cursor: pointer;
+  transition: transform 0.35s var(--spring);
 }
+
+.next-slot:hover { transform: translateY(-2px); }
+.next-slot:active { transform: scale(0.97); }
+
+.next-slot-dot {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--gloss-pink);
+  box-shadow: var(--shine-inset);
+  position: relative;
+}
+
+.next-slot-dot::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--plum);
+  box-shadow: 0 0 0 0 rgb(107 63 82 / 0.5);
+  animation: pulse 2s ease-out infinite;
+}
+
+@keyframes pulse {
+  70% { box-shadow: 0 0 0 10px rgb(107 63 82 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(107 63 82 / 0); }
+}
+
+.next-slot strong { font-weight: 600; }
+.next-slot small { display: block; font-size: 0.75rem; color: var(--plum-muted); }
+
+.bottles {
+  position: relative;
+  height: clamp(220px, 32vw, 340px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(12px, 3vw, 28px);
+}
+
+/* platforma pe care stau sticluțele */
+.bottles::after {
+  content: '';
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: -6px;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(107 63 82 / 0.22), transparent);
+}
+
+.bottle {
+  --size: 1;
+  position: relative;
+  width: calc(78px * var(--size));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: float 5s ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+@keyframes float {
+  50% { transform: translateY(-10px) rotate(var(--tilt, 0deg)); }
+}
+
+.bottle-cap {
+  width: 46%;
+  height: calc(70px * var(--size));
+  border-radius: 10px 10px 4px 4px;
+  background: var(--gloss-plum);
+  box-shadow: var(--shine-inset);
+  position: relative;
+}
+
+.bottle-cap::before {
+  content: '';
+  position: absolute;
+  left: 18%;
+  top: 8%;
+  width: 18%;
+  height: 70%;
+  border-radius: 999px;
+  background: linear-gradient(rgb(255 255 255 / 0.6), rgb(255 255 255 / 0));
+}
+
+.bottle-neck {
+  width: 58%;
+  height: calc(10px * var(--size));
+  background: linear-gradient(90deg, #d8c8ca, white 40%, #c9b4b8);
+}
+
+/* corpul: sticlă colorată, cu reflexie verticală și una rotundă */
+.bottle-body {
+  width: 100%;
+  height: calc(104px * var(--size));
+  border-radius: 22px 22px 26px 26px;
+  background:
+    radial-gradient(60% 40% at 30% 22%, rgb(255 255 255 / 0.75), transparent 60%),
+    linear-gradient(90deg, rgb(0 0 0 / 0.12), transparent 30%, transparent 70%, rgb(0 0 0 / 0.16)),
+    var(--polish);
+  box-shadow:
+    inset 0 2px 0 rgb(255 255 255 / 0.6),
+    inset 0 -10px 18px rgb(0 0 0 / 0.14),
+    0 18px 30px -14px color-mix(in srgb, var(--polish) 70%, black);
+  position: relative;
+}
+
+.bottle-body::after {
+  content: '';
+  position: absolute;
+  right: 16%;
+  top: 14%;
+  width: 9%;
+  height: 58%;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.4);
+}
+
+.bottle:nth-child(2) { --size: 1.25; --delay: -1.6s; --tilt: -2deg; }
+.bottle:nth-child(3) { --delay: -3.1s; --tilt: 2deg; }
+
+@media (max-width: 760px) {
+  .bottle { --size: 0.72; }
+  .bottle:nth-child(2) { --size: 0.9; }
+}
+
+/* ---------- Calendar ---------- */
+#calendar { scroll-margin-top: 90px; }
 
 .booking-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) 350px;
   gap: 24px;
   align-items: start;
 }
@@ -467,19 +616,21 @@ main { padding-block: clamp(32px, 6vw, 64px); }
 .calendar-title span { color: var(--plum-muted); font-weight: 400; }
 
 .calendar-nav {
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
-  border: 1px solid var(--line);
-  background: white;
+  border: 0;
+  background: var(--gloss-ivory);
+  box-shadow: var(--shine-inset), inset 0 0 0 1px var(--line), 0 6px 14px -8px rgb(107 63 82 / 0.4);
   color: var(--plum);
   font-size: 1.6rem;
   line-height: 1;
   cursor: pointer;
-  transition: background var(--transition);
+  transition: transform 0.35s var(--spring);
 }
 
-.calendar-nav:hover:not(:disabled) { background: var(--pink-soft); }
+.calendar-nav:hover:not(:disabled) { transform: translateY(-2px); }
+.calendar-nav:active:not(:disabled) { transform: scale(0.92); }
 .calendar-nav:disabled { opacity: 0.3; cursor: default; }
 
 .calendar-grid {
@@ -492,19 +643,19 @@ main { padding-block: clamp(32px, 6vw, 64px); }
 
 .calendar-weekday {
   text-align: center;
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   color: var(--plum-muted);
   padding-bottom: 6px;
 }
 
 .calendar-day {
   position: relative;
-  min-height: clamp(52px, 9vw, 92px);
+  min-height: clamp(50px, 9vw, 92px);
   padding: 8px;
-  border-radius: 14px;
-  border: 1px solid transparent;
+  border-radius: 16px;
+  border: 0;
   background: transparent;
   color: var(--plum);
   font: inherit;
@@ -513,7 +664,8 @@ main { padding-block: clamp(32px, 6vw, 64px); }
   flex-direction: column;
   justify-content: space-between;
   cursor: pointer;
-  transition: background var(--transition), transform var(--transition), border-color var(--transition);
+  overflow: hidden;
+  transition: transform 0.35s var(--spring), box-shadow var(--transition);
 }
 
 .calendar-day:disabled { cursor: default; }
@@ -522,24 +674,46 @@ main { padding-block: clamp(32px, 6vw, 64px); }
   font-family: var(--ff-display);
   font-size: clamp(1rem, 2.4vw, 1.35rem);
   line-height: 1;
+  position: relative;
 }
 
 .calendar-day-hint {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   line-height: 1.2;
   color: var(--plum-muted);
+  position: relative;
 }
 
-.calendar-day.is-available { background: var(--pink); }
-.calendar-day.is-available:hover { transform: translateY(-2px); border-color: var(--plum); }
+/* zi disponibilă = o „bomboană” de lac roz */
+.calendar-day.is-available {
+  background: var(--gloss-pink);
+  box-shadow: var(--shine-inset), 0 8px 16px -10px rgb(107 63 82 / 0.55);
+}
+
+.calendar-day.is-available::before,
+.calendar-day.is-selected::before {
+  content: '';
+  position: absolute;
+  inset: 3px 12% auto;
+  height: 38%;
+  border-radius: 12px;
+  background: linear-gradient(rgb(255 255 255 / 0.55), rgb(255 255 255 / 0));
+  pointer-events: none;
+}
+
+.calendar-day.is-available:hover { transform: translateY(-3px) scale(1.03); }
+.calendar-day.is-available:active { transform: scale(0.95); transition-duration: 0.08s; }
 .calendar-day.is-available .calendar-day-hint { color: var(--plum); }
 
-.calendar-day.is-full { background: var(--pink-soft); }
+.calendar-day.is-full {
+  background: rgb(255 255 255 / 0.55);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
 
 .calendar-day.is-closed,
-.calendar-day.is-past { color: color-mix(in srgb, var(--plum) 35%, var(--ivory)); }
+.calendar-day.is-past { color: color-mix(in srgb, var(--plum) 32%, var(--ivory)); }
 
-.calendar-day.is-off { background: var(--pink-soft); color: var(--plum-muted); }
+.calendar-day.is-off { background: rgb(255 255 255 / 0.45); color: var(--plum-muted); }
 
 .calendar-day-x {
   position: absolute;
@@ -551,23 +725,30 @@ main { padding-block: clamp(32px, 6vw, 64px); }
   pointer-events: none;
 }
 
-.calendar-day.is-today .calendar-day-number {
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
+.calendar-day.is-today .calendar-day-number::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -5px;
+  height: 3px;
+  border-radius: 3px;
+  background: currentColor;
 }
 
+/* ziua aleasă = jeleu prună */
 .calendar-day.is-selected,
 .calendar-day.is-selected:hover {
-  background: var(--plum);
+  background: var(--gloss-plum);
   color: var(--ivory);
-  border-color: var(--plum);
+  box-shadow: var(--shine-inset), var(--drop-plum);
+  transform: translateY(-2px) scale(1.04);
 }
 
 .calendar-day.is-selected .calendar-day-hint { color: var(--pink); }
 
 @media (max-width: 560px) {
-  .calendar-day { padding: 6px; border-radius: 10px; align-items: center; justify-content: center; text-align: center; }
+  .calendar-day { padding: 6px; border-radius: 12px; align-items: center; justify-content: center; text-align: center; }
   .calendar-day-hint { display: none; }
 }
 
@@ -576,7 +757,7 @@ main { padding-block: clamp(32px, 6vw, 64px); }
   flex-wrap: wrap;
   gap: 16px;
   margin-top: 20px;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--plum-muted);
 }
 
@@ -585,13 +766,13 @@ main { padding-block: clamp(32px, 6vw, 64px); }
 .legend-swatch {
   width: 16px;
   height: 16px;
-  border-radius: 5px;
+  border-radius: 6px;
   border: 1px solid var(--line);
 }
 
-.legend-swatch.is-available { background: var(--pink); border-color: var(--pink); }
-.legend-swatch.is-full { background: var(--pink-soft); }
-.legend-swatch.is-off { background: var(--pink-soft); position: relative; }
+.legend-swatch.is-available { background: var(--gloss-pink); border-color: var(--pink); }
+.legend-swatch.is-full { background: white; }
+.legend-swatch.is-off { background: white; position: relative; }
 .legend-swatch.is-off::after {
   content: '✕';
   position: absolute;
@@ -609,43 +790,189 @@ main { padding-block: clamp(32px, 6vw, 64px); }
 
 .slot-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
   gap: 10px;
   margin: 18px 0 20px;
 }
 
+/* orele = pastile lucioase */
 .slot {
-  height: 46px;
-  border-radius: var(--radius);
-  border: 1px solid var(--plum);
-  background: white;
+  position: relative;
+  height: 48px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--gloss-ivory);
+  box-shadow: var(--shine-inset), inset 0 0 0 1px var(--line), 0 6px 14px -10px rgb(107 63 82 / 0.5);
   color: var(--plum);
-  font: 500 1rem var(--ff-body);
+  font: 600 1rem var(--ff-body);
   cursor: pointer;
-  transition: background var(--transition), color var(--transition);
+  overflow: hidden;
+  transition: transform 0.35s var(--spring), box-shadow var(--transition);
 }
 
-.slot:hover { background: var(--pink-soft); }
-.slot.is-selected { background: var(--plum); color: var(--ivory); }
+.slot:hover { transform: translateY(-2px); }
+.slot:active { transform: scale(0.94); transition-duration: 0.08s; }
+
+.slot.is-selected {
+  background: var(--gloss-plum);
+  color: var(--ivory);
+  box-shadow: var(--shine-inset), var(--drop-plum);
+}
+
+.slot.is-selected::before {
+  content: '';
+  position: absolute;
+  inset: 3px 14% auto;
+  height: 42%;
+  border-radius: 999px;
+  background: linear-gradient(rgb(255 255 255 / 0.45), rgb(255 255 255 / 0));
+}
 
 .slot-auth { display: grid; gap: 10px; }
 .slot-auth p { margin-bottom: 4px; }
 
-.booking-success { text-align: center; }
+.sheet-close { display: none; }
+.sheet-backdrop { display: none; }
 
-.success-mark {
-  display: inline-grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--pink);
-  font-size: 1.6rem;
-  margin-bottom: 12px;
-}
-
+/* pe telefon, panoul cu ore urcă de jos ca o foaie */
 @media (max-width: 900px) {
   .slot-panel { position: static; }
+
+  .slot-panel.as-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    z-index: 40;
+    max-height: 78vh;
+    overflow-y: auto;
+    border-radius: 28px 28px 0 0;
+    padding: 28px 20px calc(24px + env(safe-area-inset-bottom));
+    background: rgb(251 247 243 / 0.94);
+    transform: translateY(105%);
+    transition: transform 0.45s var(--spring);
+  }
+
+  .slot-panel.as-sheet.is-open { transform: translateY(0); }
+
+  /* mânerul foii */
+  .slot-panel.as-sheet::before {
+    content: '';
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    width: 44px;
+    height: 5px;
+    margin-left: -22px;
+    border-radius: 999px;
+    background: var(--line);
+  }
+
+  .slot-panel.as-sheet .sheet-close {
+    display: grid;
+    place-items: center;
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 0;
+    background: var(--gloss-ivory);
+    box-shadow: var(--shine-inset), inset 0 0 0 1px var(--line);
+    color: var(--plum);
+    cursor: pointer;
+  }
+
+  .sheet-backdrop.is-open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgb(107 63 82 / 0.25);
+    backdrop-filter: blur(3px);
+    animation: fade-in 0.25s ease both;
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+
+/* bara fixă de jos de pe telefon („Programează-te”) */
+.sticky-cta { display: none; }
+
+@media (max-width: 900px) {
+  .sticky-cta {
+    display: block;
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    z-index: 25;
+    animation: cta-in 0.5s var(--spring) both 0.4s;
+  }
+
+  .sticky-cta .btn {
+    width: 100%;
+    min-height: 58px;
+    flex-direction: column;
+    gap: 0;
+    line-height: 1.15;
+    font-size: 1rem;
+  }
+
+  .sticky-cta .btn small { font-size: 0.76rem; font-weight: 500; opacity: 0.85; }
+
+  .has-sticky-cta { padding-bottom: 90px; }
+}
+
+@keyframes cta-in {
+  from { opacity: 0; transform: translateY(30px); }
+}
+
+/* ---------- Confirmarea programării ---------- */
+.booking-success { text-align: center; position: relative; }
+
+.success-mark {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--gloss-plum);
+  box-shadow: var(--shine-inset), var(--drop-plum);
+  color: var(--ivory);
+  font-size: 1.7rem;
+  margin-bottom: 14px;
+  animation: pop 0.6s var(--spring) both;
+}
+
+@keyframes pop {
+  from { transform: scale(0.3); opacity: 0; }
+}
+
+/* picături de lac care „sar” din bifă */
+.success-mark i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px;
+  border-radius: 50% 50% 50% 0;
+  background: var(--gloss-pink);
+  box-shadow: var(--shine-inset);
+  animation: drop 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) both 0.15s;
+  transform: rotate(var(--a)) translateY(0);
+  opacity: 0;
+}
+
+@keyframes drop {
+  20% { opacity: 1; }
+  to { transform: rotate(var(--a)) translateY(-46px) scale(0.6); opacity: 0; }
 }
 
 /* ---------- Liste programări ---------- */
@@ -664,15 +991,13 @@ main { padding-block: clamp(32px, 6vw, 64px); }
   gap: 12px;
   flex-wrap: wrap;
   padding: 16px 18px;
-  border-radius: var(--radius);
-  background: white;
-  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: rgb(255 255 255 / 0.8);
+  box-shadow: inset 0 1px 0 white, inset 0 0 0 1px var(--line);
 }
 
 .appointment-item strong { display: block; }
 .appointment-item strong::first-letter { text-transform: uppercase; }
-
-.section-title { margin-top: 40px; }
 
 /* ---------- Administrare ---------- */
 .month-tools {
@@ -687,9 +1012,9 @@ main { padding-block: clamp(32px, 6vw, 64px); }
 
 .panel-subtitle {
   font-family: var(--ff-body);
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--plum-muted);
   margin: 22px 0 10px;
@@ -708,22 +1033,25 @@ main { padding-block: clamp(32px, 6vw, 64px); }
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 38px;
-  padding: 0 6px 0 14px;
+  height: 40px;
+  padding: 0 6px 0 16px;
   border-radius: 999px;
-  background: var(--pink);
-  font-weight: 500;
+  background: var(--gloss-pink);
+  box-shadow: var(--shine-inset), 0 6px 14px -10px rgb(107 63 82 / 0.6);
+  font-weight: 600;
+  animation: pop 0.45s var(--spring) both;
 }
 
 .window-chip button {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 0;
-  background: color-mix(in srgb, var(--plum) 12%, transparent);
+  background: rgb(255 255 255 / 0.6);
   color: var(--plum);
   cursor: pointer;
   font-size: 0.75rem;
+  transition: background var(--transition), color var(--transition);
 }
 
 .window-chip button:hover { background: var(--plum); color: var(--ivory); }
@@ -732,7 +1060,6 @@ main { padding-block: clamp(32px, 6vw, 64px); }
 
 .window-presets { display: flex; flex-wrap: wrap; gap: 8px; }
 .window-presets .chip { text-transform: none; }
-.window-presets .chip:hover { background: var(--pink-soft); }
 
 .window-custom {
   display: grid;
@@ -741,18 +1068,9 @@ main { padding-block: clamp(32px, 6vw, 64px); }
   gap: 8px;
 }
 
-.window-custom input {
-  height: 44px;
-  min-width: 0;
-  padding: 0 10px;
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
-  background: white;
-  color: var(--plum);
-  font: 400 0.95rem var(--ff-body);
-}
+.window-custom input { height: 46px; padding: 0 10px; font-size: 0.95rem; }
+.window-custom .btn { padding: 0 18px; }
 
-.window-custom .btn { padding: 0 16px; }
 .day-off-box {
   margin-top: 20px;
   padding-top: 18px;
@@ -785,22 +1103,40 @@ main { padding-block: clamp(32px, 6vw, 64px); }
 }
 
 .chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  height: 38px;
-  padding: 0 14px;
+  height: 40px;
+  padding: 0 16px;
   border-radius: 999px;
-  border: 1px solid var(--line);
-  background: white;
+  border: 0;
+  background: var(--gloss-ivory);
+  box-shadow: var(--shine-inset), inset 0 0 0 1px var(--line);
+  color: var(--plum);
   cursor: pointer;
-  font-size: 0.9rem;
+  font: 500 0.9rem var(--ff-body);
   text-transform: capitalize;
   user-select: none;
-  transition: background var(--transition), color var(--transition);
+  transition: transform 0.35s var(--spring), background var(--transition), color var(--transition);
 }
 
+.chip:hover { transform: translateY(-1px); }
+.chip:active { transform: scale(0.95); }
+
 .chip input { position: absolute; opacity: 0; pointer-events: none; }
-.chip.is-on { background: var(--plum); border-color: var(--plum); color: var(--ivory); }
+.chip.is-on { background: var(--gloss-plum); color: var(--ivory); box-shadow: var(--shine-inset), var(--drop-plum); }
 .chip:has(input:focus-visible) { outline: 2px solid var(--plum); outline-offset: 2px; }
 
 .settings-actions { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
+
+/* ---------- Mai puține animații, la cerere ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+  }
+}

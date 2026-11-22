@@ -1,15 +1,46 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { schedulingApi, type Appointment, type DayAvailability } from '../api/scheduling'
 import { useAuth } from '../auth/context'
 import { Calendar, LegendItem, type DayInfo } from '../components/Calendar'
-import { addMonths, formatDuration, formatLong, monthRange, parseISO, todayISO } from '../lib/dates'
+import { addDaysISO, addMonths, formatDuration, formatLong, formatShort, monthRange, parseISO, todayISO } from '../lib/dates'
 
 const MAX_MONTHS_AHEAD = 3
+const HEADLINE = 'Lucioase, ca oja proaspătă.'
+const POLISHES = ['#e8c4c4', '#6b3f52', '#c98a96']
 
 function slotsHint(n: number) {
   return n === 1 ? '1 loc liber' : `${n} locuri libere`
+}
+
+/** Titlul apare cuvânt cu cuvânt (animație doar CSS). */
+function RevealTitle({ text }: { text: string }) {
+  return (
+    <h1 aria-label={text}>
+      {text.split(' ').map((word, i) => (
+        <span key={i} aria-hidden="true">
+          <span className="reveal-word" style={{ '--i': i } as CSSProperties}>
+            {word}
+          </span>{' '}
+        </span>
+      ))}
+    </h1>
+  )
+}
+
+function Bottles() {
+  return (
+    <div className="bottles" aria-hidden="true">
+      {POLISHES.map((color) => (
+        <div key={color} className="bottle" style={{ '--polish': color } as CSSProperties}>
+          <div className="bottle-cap" />
+          <div className="bottle-neck" />
+          <div className="bottle-body" />
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export function Home() {
@@ -21,6 +52,7 @@ export function Home() {
   const [duration, setDuration] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [nextSlot, setNextSlot] = useState<{ date: string; time: string } | null>(null)
 
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
@@ -43,9 +75,25 @@ export function Home() {
     }
   }, [])
 
+  /** Primul loc liber din următoarele ~6 săptămâni — pentru chip-ul din hero și bara de jos. */
+  const loadNextSlot = useCallback(async () => {
+    try {
+      const start = todayISO()
+      const data = await schedulingApi.availability(start, addDaysISO(start, 45))
+      const first = data.days.find((d) => d.status === 'available' && d.slots.length > 0)
+      setNextSlot(first ? { date: first.date, time: first.slots[0] } : null)
+    } catch {
+      setNextSlot(null)
+    }
+  }, [])
+
   useEffect(() => {
     loadMonth(view.year, view.month)
   }, [view, loadMonth])
+
+  useEffect(() => {
+    loadNextSlot()
+  }, [loadNextSlot])
 
   const monthsAhead = (view.year - today.year) * 12 + (view.month - today.month)
   const goMonth = (delta: number) => setView((v) => addMonths(v.year, v.month, delta))
@@ -70,10 +118,23 @@ export function Home() {
     [days],
   )
 
-  const selectDay = (iso: string) => {
+  const selectDay = (iso: string, time?: string) => {
     setSelectedDay(iso)
-    setSelectedTime(days[iso]?.slots[0] ?? null)
+    setSelectedTime(time ?? days[iso]?.slots[0] ?? null)
     setBookError(null)
+    setBooked(null)
+  }
+
+  const openNextSlot = () => {
+    if (!nextSlot) return
+    const { year, month } = parseISO(nextSlot.date)
+    setView({ year, month })
+    selectDay(nextSlot.date, nextSlot.time)
+    document.getElementById('calendar')?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const closeSheet = () => {
+    setSelectedDay(null)
     setBooked(null)
   }
 
@@ -91,20 +152,48 @@ export function Home() {
     } finally {
       setBooking(false)
       loadMonth(view.year, view.month)
+      loadNextSlot()
     }
   }
 
   const slots = useMemo(() => (selectedDay ? (days[selectedDay]?.slots ?? []) : []), [days, selectedDay])
+  const sheetOpen = selectedDay !== null || booked !== null
 
   return (
-    <>
-      <section className="booking-intro">
-        <span className="eyebrow">Programări online</span>
-        <h1>Alege ziua pentru unghiile tale</h1>
-        <p className="muted">
-          Zilele în roz au ore libere. Îți arătăm doar orele la care lucrarea ta încape în program
-          {duration ? ` (durează aproximativ ${formatDuration(duration)})` : ''}.
-        </p>
+    <div className="has-sticky-cta">
+      <section className="gloss-hero">
+        <div>
+          <span className="eyebrow">Programări online</span>
+          <RevealTitle text={HEADLINE} />
+          <p className="lead muted">
+            Alegi ziua, iar noi îți arătăm doar orele la care lucrarea ta încape în program
+            {duration ? ` (cam ${formatDuration(duration)})` : ''}. Plătești la salon, în ziua programării.
+          </p>
+
+          {nextSlot && (
+            <button type="button" className="next-slot" onClick={openNextSlot}>
+              <span className="next-slot-dot" aria-hidden="true" />
+              <span>
+                <small>Primul loc liber</small>
+                <strong>
+                  {formatShort(nextSlot.date)}, ora {nextSlot.time}
+                </strong>
+              </span>
+            </button>
+          )}
+
+          <div className="hero-actions">
+            <a href="#calendar" className="btn btn-primary">
+              Vezi zilele libere
+            </a>
+            {!user && (
+              <Link to="/inregistrare" className="btn btn-secondary">
+                Cont nou
+              </Link>
+            )}
+          </div>
+        </div>
+        <Bottles />
       </section>
 
       <section id="calendar" className="booking-layout">
@@ -115,7 +204,7 @@ export function Home() {
             month={view.month}
             getDay={getDay}
             selected={selectedDay}
-            onSelect={selectDay}
+            onSelect={(iso) => selectDay(iso)}
             canPrev={monthsAhead > 0}
             canNext={monthsAhead < MAX_MONTHS_AHEAD}
             onPrev={() => goMonth(-1)}
@@ -131,10 +220,23 @@ export function Home() {
           />
         </div>
 
-        <aside className="card slot-panel" aria-live="polite">
+        <div className={`sheet-backdrop${sheetOpen ? ' is-open' : ''}`} onClick={closeSheet} aria-hidden="true" />
+
+        <aside className={`card slot-panel as-sheet${sheetOpen ? ' is-open' : ''}`} aria-live="polite">
+          {sheetOpen && (
+            <button type="button" className="sheet-close" onClick={closeSheet} aria-label="Închide">
+              ✕
+            </button>
+          )}
+
           {booked ? (
             <div className="booking-success">
-              <span className="success-mark" aria-hidden="true">✓</span>
+              <span className="success-mark" aria-hidden="true">
+                ✓
+                {[0, 60, 120, 180, 240, 300].map((a) => (
+                  <i key={a} style={{ '--a': `${a}deg` } as CSSProperties} />
+                ))}
+              </span>
               <h2>Te-am programat!</h2>
               <p>
                 <strong>{formatLong(booked.date)}</strong>, de la <strong>{booked.start}</strong> la {booked.end}.
@@ -155,7 +257,7 @@ export function Home() {
               {duration && <p className="muted">Lucrarea durează aproximativ {formatDuration(duration)}.</p>}
 
               {slots.length === 0 ? (
-                <p className="muted">Ziua asta s-a ocupat între timp. Alege altă zi.</p>
+                <p className="muted">{loading ? 'Se încarcă orele…' : 'Ziua asta s-a ocupat între timp. Alege altă zi.'}</p>
               ) : (
                 <div className="slot-list" role="radiogroup" aria-label="Ora de început">
                   {slots.map((t) => (
@@ -208,6 +310,24 @@ export function Home() {
           )}
         </aside>
       </section>
-    </>
+
+      {/* pe telefon: buton fix jos, la îndemâna degetului mare */}
+      {!sheetOpen && (
+        <div className="sticky-cta">
+          {nextSlot ? (
+            <button type="button" className="btn btn-primary" onClick={openNextSlot}>
+              <span>Programează-te</span>
+              <small>
+                primul loc: {formatShort(nextSlot.date)}, {nextSlot.time}
+              </small>
+            </button>
+          ) : (
+            <a href="#calendar" className="btn btn-primary">
+              Programează-te
+            </a>
+          )}
+        </div>
+      )}
+    </div>
   )
 }

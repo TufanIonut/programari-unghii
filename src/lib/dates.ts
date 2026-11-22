@@ -65,3 +65,15 @@ export function formatDuration(minutes: number): string {
   const hours = h === 1 ? '1 oră' : `${h} ore`
   return m ? `${hours} și ${m} min` : hours
 }
+
+export function addDaysISO(iso: string, days: number): string {
+  const { year, month, day } = parseISO(iso)
+  const d = new Date(Date.UTC(year, month, day + days))
+  return toISO(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+}
+
+/** „marți, 24 nov.” — pentru chip-uri scurte */
+export function formatShort(iso: string): string {
+  const { month, day } = parseISO(iso)
+  return `${WEEKDAYS_LONG[weekdayIndex(iso)]}, ${day} ${MONTHS[month].slice(0, 3)}.`
+}

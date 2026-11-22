@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { IS_DEMO } from '../api/client'
 import { useAuth } from '../auth/context'
 
@@ -7,6 +7,7 @@ export const SALON_NAME = 'Studio Unghii'
 export function Layout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const handleLogout = async () => {
     await logout()
@@ -69,7 +70,10 @@ export function Layout() {
       </header>
 
       <main className="container">
-        <Outlet />
+        {/* cheia nouă la fiecare rută repornește animația de intrare a paginii */}
+        <div className="page" key={location.pathname}>
+          <Outlet />
+        </div>
       </main>
 
       <footer className="footer">
