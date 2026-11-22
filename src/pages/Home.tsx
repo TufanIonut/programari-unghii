@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError } from '../api/client'
+import { loyaltyApi, type LoyaltyCard } from '../api/loyalty'
 import { profileApi, type Pricing, type WorkEstimate } from '../api/profile'
 import { schedulingApi, type Appointment, type DayAvailability } from '../api/scheduling'
 import { useAuth } from '../auth/context'
 import { Calendar, LegendItem, type DayInfo } from '../components/Calendar'
+import { StampDots } from '../components/LoyaltyCard'
+import { visitsLeftText } from '../lib/loyalty'
 import { MONTHS, addDaysISO, addMonths, formatDuration, formatLong, formatShort, monthRange, parseISO, todayISO } from '../lib/dates'
 
 const MAX_MONTHS_AHEAD = 3
@@ -47,11 +50,15 @@ export function Home() {
   const [work, setWork] = useState<WorkEstimate | null | undefined>(undefined)
   const isClient = user?.role === 'client'
 
+  const [card, setCard] = useState<LoyaltyCard | null>(null)
+
   useEffect(() => {
     if (!isClient) {
       setWork(undefined)
+      setCard(null)
       return
     }
+    loyaltyApi.card().then(setCard).catch(() => setCard(null))
     profileApi
       .get()
       .then((r) => setWork(r?.estimate ?? null))
@@ -275,17 +282,27 @@ export function Home() {
           </Link>
         )}
 
-        <div className="tile" style={{ '--i': 2 } as CSSProperties}>
-          <span className="tile-label">Card de fidelitate</span>
-          <span className="loyalty-dots" aria-hidden="true">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <i key={i} />
-            ))}
-          </span>
-          <span className="tile-foot">
-            <span>În curând: fiecare vizită se bifează cu un cod QR.</span>
-          </span>
-        </div>
+        {card ? (
+          <Link to="/profil#card" className="tile" style={{ '--i': 2 } as CSSProperties}>
+            <span className="tile-label">Cardul tău</span>
+            <StampDots stamps={card.stamps} required={card.required} />
+            <span className="tile-foot">
+              <span>{visitsLeftText(card)}</span>
+            </span>
+          </Link>
+        ) : (
+          <Link
+            to={user?.role === 'admin' ? '/admin#fidelitate' : user ? '/profil#card' : '/inregistrare'}
+            className="tile"
+            style={{ '--i': 2 } as CSSProperties}
+          >
+            <span className="tile-label">Card de fidelitate</span>
+            <StampDots stamps={0} required={5} />
+            <span className="tile-foot">
+              <span>{user?.role === 'admin' ? 'Scanează cardul clientei' : 'Fiecare vizită se bifează cu un cod QR.'}</span>
+            </span>
+          </Link>
+        )}
 
         {pricing && (
           <div className="tile tile-full" style={{ '--i': 3 } as CSSProperties}>

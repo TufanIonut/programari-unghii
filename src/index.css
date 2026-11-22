@@ -513,9 +513,6 @@ button.tile:active, a.tile:active { transform: scale(0.985); }
 
 .tile:hover .tile-arrow { transform: rotate(-45deg); }
 
-.loyalty-dots { display: flex; gap: 8px; }
-.loyalty-dots i { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--plum); }
-
 .price-list {
   list-style: none;
   padding: 0;
@@ -1420,6 +1417,182 @@ button.tile:active, a.tile:active { transform: scale(0.985); }
 }
 
 .pricing-group { font-family: var(--ff-display); font-size: 1.15rem; margin: 18px 0 8px; }
+
+/* ---------- Card de fidelitate ---------- */
+.stamp-dots { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.stamp-dots i {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--plum);
+  transition: background 0.3s ease;
+}
+
+.stamp-dots i.is-on { background: var(--plum); }
+
+/* ultima bulină = recompensa: inimioară mică în mijloc */
+.stamp-dots i.is-reward::after {
+  content: '♥';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--pink-strong);
+}
+
+.stamp-dots i.is-reward.is-on::after { color: var(--pink); }
+
+.stamp-dots.is-light i { border-color: var(--pink); }
+.stamp-dots.is-light i.is-on { background: var(--pink); }
+.stamp-dots.is-light i.is-reward.is-on::after { color: var(--plum); }
+
+.loyalty-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: clamp(18px, 4vw, 40px);
+  align-items: center;
+  padding: clamp(20px, 4vw, 36px);
+  border-radius: var(--radius-lg);
+  background: var(--plum);
+  color: var(--ivory);
+}
+
+.loyalty-reward {
+  font-family: var(--ff-display);
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin: 12px 0 18px;
+}
+
+.loyalty-reward em { font-style: italic; font-weight: 300; color: var(--pink); }
+.loyalty-left { margin: 16px 0 4px; }
+.loyalty-meta { margin: 0; font-size: 0.85rem; color: color-mix(in srgb, var(--ivory) 70%, var(--plum)); }
+
+.loyalty-qr { margin: 0; text-align: center; }
+
+.loyalty-qr .qr {
+  width: clamp(170px, 30vw, 220px);
+  aspect-ratio: 1;
+  padding: 10px;
+  border-radius: 16px;
+  background: var(--ivory);
+}
+
+.loyalty-qr .qr svg { display: block; width: 100%; height: 100%; }
+.loyalty-qr figcaption { margin-top: 10px; display: grid; gap: 2px; }
+.loyalty-qr strong { font-family: var(--ff-body); font-size: 1.05rem; letter-spacing: 0.12em; }
+.loyalty-qr small { font-size: 0.78rem; color: color-mix(in srgb, var(--ivory) 70%, var(--plum)); }
+
+@media (max-width: 640px) {
+  .loyalty-card { grid-template-columns: 1fr; }
+  .loyalty-qr { order: -1; }
+  .loyalty-qr .qr { width: min(240px, 70vw); margin-inline: auto; }
+}
+
+/* ---------- Scanare (admin) ---------- */
+.loyalty-admin {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .loyalty-admin { grid-template-columns: 1fr; }
+}
+
+.scan-btn { min-height: 58px; font-size: 1.05rem; margin-bottom: 12px; }
+
+.code-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.code-form input {
+  min-width: 0;
+  height: 46px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--plum);
+  font: 500 1rem var(--ff-body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.code-form input::placeholder { text-transform: none; letter-spacing: 0; color: var(--plum-muted); }
+.code-form input:focus { outline: none; border-color: var(--plum); }
+
+.scan-result {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  background: var(--pink-soft);
+  animation: pop 0.45s var(--spring) both;
+}
+
+.scan-result p { margin: 0 0 6px; }
+.scan-big { font-family: var(--ff-display); font-weight: 400; font-size: 1.8rem; line-height: 1.05; }
+.scan-result.is-complete { background: var(--plum); color: var(--ivory); }
+.scan-result.is-complete em { color: var(--pink); }
+.scan-result.is-complete .stamp-dots i { border-color: var(--pink); background: var(--pink); }
+
+.scanner {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 18px;
+  padding: 16px;
+  background: rgb(30 16 23 / 0.92);
+  animation: fade-in 0.2s ease both;
+}
+
+.scanner-box {
+  position: relative;
+  width: min(420px, 100%);
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: black;
+  display: grid;
+  place-items: center;
+}
+
+.scanner-box video { width: 100%; height: 100%; object-fit: cover; }
+
+.scanner-frame {
+  position: absolute;
+  inset: 22% 14%;
+  border: 2px solid var(--pink);
+  border-radius: 18px;
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.35);
+}
+
+.scanner-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  margin: 0;
+  text-align: center;
+  color: var(--ivory);
+  font-size: 0.9rem;
+}
+
+.scanner-error { color: var(--ivory); padding: 24px; text-align: center; }
+.scanner-close { min-width: 160px; }
 
 /* ---------- Mai puține animații, la cerere ---------- */
 @media (prefers-reduced-motion: reduce) {

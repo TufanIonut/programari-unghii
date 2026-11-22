@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../api/client'
+import { loyaltyApi, type LoyaltyCard as Card } from '../api/loyalty'
 import { profileApi, type ProfileResponse } from '../api/profile'
 import { schedulingApi, type Appointment } from '../api/scheduling'
 import { useAuth } from '../auth/context'
+import { LoyaltyCard } from '../components/LoyaltyCard'
 import { formatDuration, formatLong } from '../lib/dates'
 import { LENGTH, MATERIAL, labelOf } from '../lib/profileOptions'
 
@@ -13,6 +15,7 @@ export function Profile() {
   const [error, setError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState<string | null>(null)
   const [fisa, setFisa] = useState<ProfileResponse | null | undefined>(undefined)
+  const [card, setCard] = useState<Card | null>(null)
 
   const load = useCallback(() => {
     schedulingApi
@@ -25,7 +28,13 @@ export function Profile() {
     if (user?.role !== 'client') return
     load()
     profileApi.get().then(setFisa).catch(() => setFisa(undefined))
+    loyaltyApi.card().then(setCard).catch(() => setCard(null))
   }, [user, load])
+
+  // venit din placa „Cardul tău”: cardul se încarcă după pagină, așa că derulăm noi la el
+  useEffect(() => {
+    if (card && window.location.hash === '#card') document.getElementById('card')?.scrollIntoView({ behavior: 'smooth' })
+  }, [card])
 
   const cancel = async (a: Appointment) => {
     if (!window.confirm(`Anulezi programarea din ${formatLong(a.date)}, ora ${a.start}?`)) return
@@ -128,12 +137,14 @@ export function Profile() {
         </>
       )}
 
-      <div className="info-grid">
-        <div className="info-tile">
-          <strong>Card de fidelitate</strong>
-          <span className="muted">Urmează: codul QR și vizitele bifate.</span>
-        </div>
-      </div>
+      {card && (
+        <>
+          <h2 className="section-title" id="card">
+            Cardul meu
+          </h2>
+          <LoyaltyCard card={card} />
+        </>
+      )}
     </section>
   )
 }

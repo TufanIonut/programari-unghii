@@ -6,6 +6,7 @@ import type { AuthResponse, User } from '../api/client'
 import type { AdminAppointment, Appointment, DayOff, OpenSlot, SalonSettings } from '../api/scheduling'
 import type { ClientProfile, Pricing, WorkEstimate } from '../api/profile'
 import { estimateWork } from '../lib/profileOptions'
+import { DEMO_LOYALTY_CODES } from './loyaltyCodes'
 import { addDaysISO, availabilityForDay, type Busy, type Window } from './availability'
 
 interface StoredUser extends User {
@@ -34,8 +35,16 @@ interface DemoDb {
   settings: SalonSettings
   pricing: Pricing
   profiles: Record<string, ClientProfile & { updatedAt: string }>
+  loyalty?: DemoLoyalty
   sessionUserId: string | null
 }
+
+interface DemoLoyalty {
+  settings: { stampsRequired: number; reward: string }
+  cards: Record<string, { code: string; stamps: number; completed: number }>
+  visits: { userId: string; day: string; completedCard: boolean }[]
+}
+
 
 const KEY = 'programari-demo-db'
 const VERSION = 3 // crește la schimbări de structură → datele demo vechi se regenerează
@@ -51,12 +60,74 @@ function load(): DemoDb {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as DemoDb
-      if (parsed.version === VERSION) return (memoryDb = parsed)
+      if (parsed.version === VERSION) return (memoryDb = withLoyalty(parsed))
     }
   } catch {
     /* stocare indisponibilă (mod privat) → lucrăm doar în memorie */
   }
-  return (memoryDb = seed())
+  return (memoryDb = withLoyalty(seed()))
+}
+
+function withLoyalty(db: DemoDb): DemoDb {
+  if (db.loyalty) return db
+  const cards: DemoLoyalty['cards'] = {}
+  const visits: DemoLoyalty['visits'] = []
+  for (const demo of DEMO_LOYALTY_CODES) {
+    const u = db.users.find((x) => x.firstName === demo.name && x.role === 'client')
+    if (!u) continue
+    cards[u.id] = { code: demo.code.replace('-', ''), stamps: demo.stamps, completed: 0 }
+    for (let i = demo.stamps; i > 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i * 21)
+      visits.push({ userId: u.id, day: toISO(d), completedCard: false })
+    }
+  }
+  db.loyalty = { settings: { stampsRequired: 5, reward: '20% reducere' }, cards, visits }
+  return db
+}
+
+// ---------------------------------------------------------------- card de fidelitate
+
+const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+
+function newLoyaltyCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(10))
+  return Array.from(bytes, (b) => CODE_ALPHABET[b & 31]).join('')
+}
+
+const formatCode = (c: string) => `${c.slice(0, 5)}-${c.slice(5)}`
+
+/** Ca pe server: acceptă „PU-CARD:…”, litere mici, cratime, O în loc de 0, I/L în loc de 1. */
+function codeFromScan(input: string | undefined): string | null {
+  if (!input) return null
+  const raw = input.slice(input.lastIndexOf(':') + 1).trim().toUpperCase()
+  let out = ''
+  for (const ch of raw) {
+    const c = ch === 'O' ? '0' : ch === 'I' || ch === 'L' ? '1' : ch
+    if (c === '-' || c === ' ') continue
+    if (!CODE_ALPHABET.includes(c)) return null
+    out += c
+  }
+  return out.length === 10 ? out : null
+}
+
+function loyaltyCard(db: DemoDb, userId: string) {
+  const l = db.loyalty!
+  if (!l.cards[userId]) {
+    l.cards[userId] = { code: newLoyaltyCode(), stamps: 0, completed: 0 }
+    save(db)
+  }
+  const c = l.cards[userId]
+  const code = formatCode(c.code)
+  return {
+    code,
+    qrText: 'PU-CARD:' + code,
+    stamps: c.stamps,
+    required: l.settings.stampsRequired,
+    reward: l.settings.reward,
+    completed: c.completed,
+    visits: l.visits.filter((v) => v.userId === userId).map((v) => v.day).sort().reverse().slice(0, 20),
+  }
 }
 
 function save(db: DemoDb) {
@@ -290,6 +361,13 @@ export async function demoFetch(input: RequestInfo | URL, init: RequestInit = {}
     return json(200, { durationMinutes: duration, days })
   }
 
+  // ---- cardul de fidelitate al clientei
+  if (method === 'GET' && path === '/api/loyalty') {
+    if (!user) return problem(401, 'Sesiunea a expirat.')
+    if (user.role !== 'client') return problem(403, 'Doar clientele au card de fidelitate.')
+    return json(200, loyaltyCard(db, user.id))
+  }
+
   // ---- prețuri (publice)
   if (method === 'GET' && path === '/api/pricing') return json(200, db.pricing)
 
@@ -447,6 +525,52 @@ export async function demoFetch(input: RequestInfo | URL, init: RequestInit = {}
       db.slots = db.slots.filter((x) => x.id !== slot.id)
       save(db)
       return json(204)
+    }
+
+    if (method === 'POST' && path === '/api/admin/loyalty/scan') {
+      const l = db.loyalty!
+      const code = codeFromScan(body?.code)
+      const ownerId = code ? Object.keys(l.cards).find((id) => l.cards[id].code === code) : undefined
+      const owner = db.users.find((u) => u.id === ownerId && u.role === 'client')
+      if (!owner) return problem(404, 'Nu am găsit niciun card cu acest cod. Verifică și încearcă din nou.')
+
+      const card = l.cards[owner.id]
+      const today = todayISO()
+      const already = l.visits.some((v) => v.userId === owner.id && v.day === today)
+      let completedNow = false
+      if (!already) {
+        card.stamps += 1
+        if (card.stamps >= l.settings.stampsRequired) {
+          card.stamps = 0
+          card.completed += 1
+          completedNow = true
+        }
+        l.visits.push({ userId: owner.id, day: today, completedCard: completedNow })
+        save(db)
+      }
+      return json(200, {
+        status: already ? 'already_today' : 'stamped',
+        clientId: owner.id,
+        clientName: `${owner.firstName} ${owner.lastName}`,
+        stamps: card.stamps,
+        required: l.settings.stampsRequired,
+        reward: l.settings.reward,
+        completed: card.completed,
+        completedNow,
+      })
+    }
+
+    if (path === '/api/admin/loyalty/settings') {
+      const l = db.loyalty!
+      if (method === 'PUT') {
+        const n = Number(body?.stampsRequired)
+        const reward = String(body?.reward ?? '').trim()
+        if (!Number.isInteger(n) || n < 2 || n > 20) return problem(400, 'Cardul trebuie să aibă între 2 și 20 de vizite.')
+        if (!reward) return problem(400, 'Scrie ce primește clienta.')
+        l.settings = { stampsRequired: n, reward: reward.slice(0, 80) }
+        save(db)
+      }
+      return json(200, l.settings)
     }
 
     if (method === 'PUT' && path === '/api/admin/pricing') {

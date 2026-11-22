@@ -9,6 +9,7 @@ import {
 } from '../api/scheduling'
 import { profileApi, type AdminClient, type Pricing } from '../api/profile'
 import { Calendar, LegendItem, type DayInfo } from '../components/Calendar'
+import { LoyaltyAdmin } from '../components/LoyaltyAdmin'
 import { CUTICLES, GROWTH, LENGTH, MATERIAL, NAIL_BED, labelOf } from '../lib/profileOptions'
 import { MONTHS, WEEKDAYS_LONG, WEEKDAYS_SHORT, addMonths, formatDuration, formatLong, monthRange, parseISO, todayISO } from '../lib/dates'
 
@@ -39,6 +40,11 @@ export function Admin() {
       </p>
 
       <ScheduleCalendar version={version} />
+
+      <h2 className="section-title" id="fidelitate">
+        Card de fidelitate
+      </h2>
+      <LoyaltyAdmin />
 
       <h2 className="section-title">Program standard și reguli</h2>
       <SettingsForm onSaved={() => setVersion((v) => v + 1)} />
